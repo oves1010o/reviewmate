@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>리뷰메이트 — 네이버 리뷰 AI 자동 답변</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700;900&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#fafaf7;--card:#fff;--gold:#f5a623;}
+*{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);overflow-x:hidden;}
+nav{position:sticky;top:0;z-index:100;background:rgba(250,250,247,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 2rem;height:62px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'Noto Serif KR',serif;font-size:1.15rem;font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);}
+.logo-dot{width:9px;height:9px;background:var(--green);border-radius:50%;}
+.nav-right{display:flex;align-items:center;gap:12px;}
+.nav-link{font-size:.85rem;color:var(--ink-light);text-decoration:none;font-weight:500;}
+.nav-link:hover{color:var(--green-dark);}
+.btn-nav{background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:.85rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;transition:all .2s;}
+.btn-nav:hover{background:var(--green-dark);}
+.hero{max-width:900px;margin:0 auto;padding:7rem 2rem 5rem;text-align:center;}
+.hero-badge{display:inline-flex;align-items:center;gap:7px;background:var(--green-light);color:var(--green-dark);font-size:.75rem;font-weight:700;letter-spacing:.08em;padding:6px 16px;border-radius:20px;margin-bottom:2rem;}
+.hero-badge::before{content:'';width:6px;height:6px;background:var(--green);border-radius:50%;}
+h1{font-family:'Noto Serif KR',serif;font-size:clamp(2rem,5vw,3.4rem);font-weight:900;line-height:1.25;color:var(--ink);margin-bottom:1.4rem;letter-spacing:-.02em;}
+h1 em{color:var(--green);font-style:normal;text-decoration:underline;text-decoration-color:rgba(3,199,90,.3);text-underline-offset:6px;}
+.hero-sub{font-size:1.05rem;color:var(--ink-light);line-height:1.9;max-width:540px;margin:0 auto 3rem;font-weight:300;}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.btn-primary{background:var(--green);color:#fff;border:none;border-radius:12px;padding:16px 36px;font-size:1rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;transition:all .2s;display:inline-flex;align-items:center;gap:8px;}
+.btn-primary:hover{background:var(--green-dark);transform:translateY(-2px);box-shadow:0 8px 24px rgba(3,199,90,.35);}
+.btn-outline{background:transparent;color:var(--ink);border:1.5px solid var(--border);border-radius:12px;padding:16px 32px;font-size:1rem;font-weight:600;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;transition:all .2s;}
+.btn-outline:hover{border-color:var(--ink);transform:translateY(-1px);}
+.social-proof{text-align:center;padding:1.5rem 2rem;font-size:.82rem;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:1.5rem;flex-wrap:wrap;}
+.proof-item{display:flex;align-items:center;gap:6px;}
+.proof-num{font-weight:700;color:var(--ink);}
+.demo-wrap{max-width:720px;margin:0 auto;padding:0 2rem 5rem;}
+.demo-card{background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.07);}
+.demo-header{background:var(--ink);padding:12px 16px;display:flex;align-items:center;gap:8px;}
+.demo-dot{width:10px;height:10px;border-radius:50%;}
+.demo-body{padding:2rem;}
+.demo-label{font-size:.7rem;font-weight:700;letter-spacing:.1em;color:var(--muted);margin-bottom:.8rem;}
+.demo-review{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:1.2rem;margin-bottom:1rem;}
+.demo-stars{color:var(--gold);font-size:.9rem;margin-bottom:.5rem;}
+.demo-text{font-size:.9rem;color:var(--ink-light);line-height:1.7;}
+.demo-reply{background:var(--green-light);border:1.5px solid var(--green);border-radius:12px;padding:1.2rem;}
+.demo-reply-tag{font-size:.7rem;font-weight:700;color:var(--green-dark);display:flex;align-items:center;gap:6px;margin-bottom:.8rem;}
+.demo-reply-tag::before{content:'';width:6px;height:6px;background:var(--green);border-radius:50%;}
+.demo-reply-text{font-size:.9rem;color:var(--ink);line-height:1.8;}
+.section{max-width:860px;margin:0 auto;padding:5rem 2rem;}
+.section-label{font-size:.72rem;font-weight:700;letter-spacing:.14em;color:var(--green-dark);text-align:center;margin-bottom:1rem;text-transform:uppercase;}
+.section-title{font-family:'Noto Serif KR',serif;font-size:clamp(1.5rem,3vw,2.2rem);font-weight:700;text-align:center;margin-bottom:.8rem;}
+.section-sub{font-size:.95rem;color:var(--muted);text-align:center;margin-bottom:3rem;line-height:1.7;}
+.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;}
+.step-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.8rem;position:relative;overflow:hidden;}
+.step-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--green);}
+.step-num{width:36px;height:36px;background:var(--green);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;margin-bottom:1rem;}
+.step-card h3{font-size:.95rem;font-weight:700;margin-bottom:.5rem;}
+.step-card p{font-size:.82rem;color:var(--muted);line-height:1.7;}
+
+/* SINGLE PLAN */
+.pricing-section{background:var(--card);padding:5rem 2rem;border-top:1px solid var(--border);}
+.pricing-center{max-width:460px;margin:0 auto;}
+.single-plan-card{border:2px solid var(--green);border-radius:24px;padding:2.8rem;text-align:center;box-shadow:0 0 0 6px rgba(3,199,90,.08);position:relative;}
+.plan-top-badge{position:absolute;top:-16px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;font-size:.8rem;font-weight:700;padding:6px 20px;border-radius:20px;white-space:nowrap;}
+.single-plan-name{font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:1.2rem;}
+.price-row{display:flex;align-items:flex-end;justify-content:center;gap:4px;margin-bottom:.5rem;}
+.price-won{font-size:1.2rem;font-weight:700;color:var(--muted);margin-bottom:.6rem;}
+.price-num{font-family:'Noto Serif KR',serif;font-size:4rem;font-weight:900;line-height:1;color:var(--ink);}
+.price-unit{font-size:1rem;color:var(--muted);margin-bottom:.5rem;}
+.single-plan-desc{font-size:.88rem;color:var(--muted);margin-bottom:2rem;line-height:1.7;}
+.single-plan-features{list-style:none;text-align:left;background:var(--bg);border-radius:14px;padding:1.4rem 1.6rem;margin-bottom:2rem;display:flex;flex-direction:column;gap:.7rem;}
+.single-plan-features li{font-size:.88rem;color:var(--ink-light);display:flex;align-items:center;gap:10px;}
+.single-plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0;}
+.trial-note{font-size:.76rem;color:var(--muted);margin-top:1rem;line-height:1.7;}
+.trial-note strong{color:var(--ink);}
+
+.faq-list{max-width:600px;margin:0 auto;display:flex;flex-direction:column;gap:.8rem;}
+.faq-item{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.faq-q{padding:1.1rem 1.4rem;font-size:.9rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none;}
+.faq-q::after{content:'+';font-size:1.2rem;color:var(--muted);transition:transform .2s;}
+.faq-item.open .faq-q::after{transform:rotate(45deg);}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .3s ease;font-size:.85rem;color:var(--ink-light);line-height:1.8;}
+.faq-a-inner{padding:.2rem 1.4rem 1.2rem;}
+.faq-item.open .faq-a{max-height:200px;}
+.cta-banner{background:var(--ink);color:#fff;padding:5rem 2rem;text-align:center;}
+.cta-banner h2{font-family:'Noto Serif KR',serif;font-size:clamp(1.5rem,3vw,2.2rem);font-weight:700;margin-bottom:1rem;}
+.cta-banner p{font-size:.95rem;color:rgba(255,255,255,.6);margin-bottom:2.5rem;line-height:1.7;}
+footer{background:var(--ink);border-top:1px solid rgba(255,255,255,.08);padding:2rem;text-align:center;font-size:.78rem;color:rgba(255,255,255,.35);}
+@media(max-width:640px){.steps-grid{grid-template-columns:1fr;}.price-num{font-size:3rem;}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="#"><div class="logo-dot"></div>리뷰메이트</a>
+  <div class="nav-right">
+    <a class="nav-link" href="#how">사용방법</a>
+    <a class="nav-link" href="#pricing">요금제</a>
+    <a class="nav-link" href="#faq">FAQ</a>
+    <a class="btn-nav" href="login.html">로그인</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-badge">네이버 스마트플레이스 리뷰 자동화</div>
+  <h1>리뷰 답변, 이제<br><em>AI가 대신</em> 달아드립니다</h1>
+  <p class="hero-sub">고객의 영수증 리뷰가 올라오면, 사장님의 톤앤매너에 맞게 AI가 자동으로 정성스러운 답변을 달아줍니다.</p>
+  <div class="hero-btns">
+    <a class="btn-primary" href="signup.html">7일 무료 체험 시작 →</a>
+    <a class="btn-outline" href="#demo">데모 보기</a>
+  </div>
+</section>
+
+<div class="social-proof">
+  <div class="proof-item"><span class="proof-num">2,400+</span> 매장 이용중</div>
+  <div>·</div>
+  <div class="proof-item"><span class="proof-num">98%</span> 고객 만족도</div>
+  <div>·</div>
+  <div class="proof-item"><span class="proof-num">월 5만+</span> 답변 자동 생성</div>
+</div>
+
+<div class="demo-wrap" id="demo">
+  <div class="demo-card">
+    <div class="demo-header">
+      <div class="demo-dot" style="background:#ff5f57"></div>
+      <div class="demo-dot" style="background:#febc2e"></div>
+      <div class="demo-dot" style="background:#28c840"></div>
+    </div>
+    <div class="demo-body">
+      <div class="demo-label">고객 리뷰</div>
+      <div class="demo-review">
+        <div class="demo-stars">★★★★★</div>
+        <div class="demo-text">떡볶이가 진짜 맛있어요!! 오늘 비가 왔는데 포장 빨리 해주셔서 너무 감사했어요 🙏 국물이 얼큰하고 깊은 맛이 나서 혼자 다 먹어버렸습니다ㅋㅋ 자주 올게요!</div>
+      </div>
+      <div class="demo-reply">
+        <div class="demo-reply-tag">AI 생성 답변 · 3초</div>
+        <div class="demo-reply-text">비 오는 날 찾아주셔서 더 감사해요 ☔ 국물 맛을 좋아해 주셔서 정말 기쁩니다! 다음에 또 오시면 더 맛있게 해드릴게요 😊 항상 건강하세요!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="section" id="how">
+  <div class="section-label">사용 방법</div>
+  <h2 class="section-title">3단계로 끝나는 간단한 설정</h2>
+  <p class="section-sub">복잡한 설치 없이 10분이면 자동화 완성</p>
+  <div class="steps-grid">
+    <div class="step-card"><div class="step-num">1</div><h3>매장 등록</h3><p>매장명, 업종, 답변 스타일을 입력하세요. 딱 한 번만 설정하면 됩니다.</p></div>
+    <div class="step-card"><div class="step-num">2</div><h3>네이버 계정 연동</h3><p>스마트플레이스 아이디와 비밀번호를 입력하면 리뷰를 자동으로 불러옵니다.</p></div>
+    <div class="step-card"><div class="step-num">3</div><h3>자동 답변 완성</h3><p>미답변 리뷰를 감지하면 AI가 즉시 사장님 톤으로 정성스러운 답변을 달아줍니다.</p></div>
+  </div>
+</section>
+
+<section class="pricing-section" id="pricing">
+  <div class="section-label">요금제</div>
+  <h2 class="section-title" style="margin-bottom:.6rem">단 하나의 플랜</h2>
+  <p class="section-sub">복잡한 선택 없이 모든 기능을 그대로</p>
+  <div class="pricing-center">
+    <div class="single-plan-card">
+      <div class="plan-top-badge">🎉 7일 무료 체험</div>
+      <div class="single-plan-name">월정액 구독</div>
+      <div class="price-row">
+        <span class="price-won">₩</span>
+        <span class="price-num">9,900</span>
+        <span class="price-unit">/월</span>
+      </div>
+      <div class="single-plan-desc">모든 기능 포함 · 언제든지 해지 가능</div>
+      <ul class="single-plan-features">
+        <li>AI 답변 자동 생성 (월 무제한)</li>
+        <li>6가지 톤앤매너 맞춤 설정</li>
+        <li>미답변 리뷰 자동 감지 & 처리</li>
+        <li>봇 감지 방지 기술 적용</li>
+        <li>실시간 처리 현황 대시보드</li>
+        <li>이메일 고객 지원</li>
+      </ul>
+      <a class="btn-primary" href="signup.html" style="width:100%;justify-content:center;padding:16px;font-size:1rem;">
+        7일 무료로 시작하기 →
+      </a>
+      <div class="trial-note">
+        <strong>7일간 완전 무료</strong> · 체험 후 월 9,900원 자동 결제<br>
+        체험 기간 내 언제든지 해지 시 요금 없음
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="faq">
+  <div class="section-label">자주 묻는 질문</div>
+  <h2 class="section-title" style="margin-bottom:2.5rem">궁금한 점이 있으신가요?</h2>
+  <div class="faq-list">
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">7일 무료 체험은 어떻게 진행되나요?</div><div class="faq-a"><div class="faq-a-inner">가입 후 7일간 모든 기능을 무료로 사용할 수 있습니다. 체험 기간 내 해지하시면 요금이 청구되지 않으며, 7일 후 자동으로 월 9,900원이 결제됩니다.</div></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">네이버 계정이 차단될 위험은 없나요?</div><div class="faq-a"><div class="faq-a-inner">리뷰 간 랜덤 딜레이, 자연스러운 타이핑 시뮬레이션 등 봇 감지 방지 기술을 적용하여 위험을 최소화합니다. 다만 네이버 정책 변경에 따라 상황이 달라질 수 있습니다.</div></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">언제든지 해지할 수 있나요?</div><div class="faq-a"><div class="faq-a-inner">네, 대시보드에서 언제든지 해지 가능합니다. 해지 시 당월 말까지 서비스가 유지되며 추가 요금은 청구되지 않습니다.</div></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">네이버 아이디와 비밀번호는 안전한가요?</div><div class="faq-a"><div class="faq-a-inner">AES-256 암호화를 통해 안전하게 저장되며, 리뷰 답변 외 다른 용도로는 절대 사용되지 않습니다.</div></div></div>
+    <div class="faq-item"><div class="faq-q" onclick="this.parentElement.classList.toggle('open')">답변 품질이 어느 정도인가요?</div><div class="faq-a"><div class="faq-a-inner">Claude AI(Anthropic)를 기반으로 사장님이 설정한 톤앤매너를 반영해 자연스러운 한국어 답변을 생성합니다. 생성 후 직접 수정도 가능합니다.</div></div></div>
+  </div>
+</section>
+
+<section class="cta-banner">
+  <h2>지금 바로 시작해보세요</h2>
+  <p>7일 무료 체험 · 카드 등록 필요 · 언제든 해지 가능</p>
+  <a class="btn-primary" href="signup.html" style="display:inline-flex">무료로 시작하기 →</a>
+</section>
+<footer>© 2025 리뷰메이트. All rights reserved.</footer>
+</body>
+</html>

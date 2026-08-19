@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>결제 — 리뷰메이트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://js.tosspayments.com/v1/payment-widget"></script>
+<style>
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
+nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;height:58px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'Noto Serif KR',serif;font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);}
+.logo-dot{width:8px;height:8px;background:var(--green);border-radius:50%;}
+.main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem;}
+.pay-layout{display:grid;grid-template-columns:1fr 380px;gap:2rem;width:100%;max-width:820px;align-items:start;}
+.pay-info{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;}
+.pay-title{font-family:'Noto Serif KR',serif;font-size:1.2rem;font-weight:700;margin-bottom:1.5rem;}
+.order-box{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:1.4rem;margin-bottom:1.5rem;}
+.order-row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;font-size:.88rem;}
+.order-row.total{border-top:1px solid var(--border);margin-top:.5rem;padding-top:.9rem;font-weight:700;font-size:1.05rem;}
+.free-chip{background:var(--green-light);color:var(--green-dark);font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:10px;}
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:.6rem;}
+.feat-list li{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--ink-light);}
+.feat-list li::before{content:'✓';color:var(--green);font-weight:700;}
+.pay-widget-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;}
+#payment-widget{margin-bottom:1rem;}
+#agreement-widget{margin-bottom:1.5rem;}
+.btn-pay{width:100%;padding:15px;border-radius:12px;border:none;background:var(--green);color:#fff;font-size:1rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .2s;}
+.btn-pay:hover{background:var(--green-dark);transform:translateY(-1px);}
+.btn-pay:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;transform:none;}
+.pay-note{font-size:.72rem;color:var(--muted);text-align:center;margin-top:.8rem;line-height:1.7;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:680px){.pay-layout{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html"><div class="logo-dot"></div>리뷰메이트</a>
+  <span style="font-size:.8rem;color:var(--muted)">🔒 토스페이먼츠 안전 결제</span>
+</nav>
+
+<div class="main">
+  <div class="pay-layout">
+    <div class="pay-info">
+      <div class="pay-title">주문 요약</div>
+      <div class="order-box">
+        <div class="order-row"><span>리뷰메이트 월정액</span><span class="free-chip">7일 무료</span></div>
+        <div class="order-row"><span style="color:var(--muted)">7일 후 자동결제</span><span style="font-weight:600">월 9,900원</span></div>
+        <div class="order-row total"><span>오늘 결제금액</span><span style="color:var(--green)">0원</span></div>
+      </div>
+      <ul class="feat-list">
+        <li>AI 답변 자동 생성 (월 무제한)</li>
+        <li>6가지 톤앤매너 맞춤 설정</li>
+        <li>미답변 리뷰 자동 감지 & 처리</li>
+        <li>봇 감지 방지 기술 적용</li>
+        <li>언제든지 해지 가능</li>
+      </ul>
+    </div>
+
+    <div class="pay-widget-wrap">
+      <div id="payment-widget"></div>
+      <div id="agreement-widget"></div>
+      <button class="btn-pay" id="payBtn" onclick="handlePay()">무료 체험 시작 (카드 등록)</button>
+      <p class="pay-note">7일 후 월 9,900원 자동 결제 · 체험 기간 내 해지 시 요금 없음</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const userId = params.get('userId') || '';
+let paymentWidget;
+
+(async () => {
+  try {
+    const res = await fetch('/api/payment/prepare', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan: 'standard' })
+    });
+    const data = await res.json();
+    paymentWidget = PaymentWidget('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN', data.customerKey);
+    await paymentWidget.renderPaymentMethods('#payment-widget', { value: 0 });
+    await paymentWidget.renderAgreement('#agreement-widget');
+  } catch(e) {
+    document.getElementById('payment-widget').innerHTML =
+      '<div style="padding:1.2rem;background:var(--bg);border-radius:10px;text-align:center;font-size:.85rem;color:var(--muted)">토스페이먼츠 위젯<br>(TOSS_CLIENT_KEY 환경변수 설정 필요)</div>';
+  }
+})();
+
+async function handlePay() {
+  window.location.href = '/dashboard.html';
+  return;
+  const btn = document.getElementById('payBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 처리중...';
+  try {
+    await paymentWidget.requestBillingAuth('카드', {
+      successUrl: `${location.origin}/payment-success.html`,
+      failUrl: `${location.origin}/payment-fail.html`,
+      customerEmail: '', customerName: '사장님'
+    });
+  } catch(e) {
+    alert('결제 중 오류: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '무료 체험 시작 (카드 등록)';
+  }
+}
+</script>
+</body>
+</html>

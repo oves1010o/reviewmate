@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>로그인 — 리뷰메이트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--muted:#999;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
+nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;height:58px;display:flex;align-items:center;}
+.logo{font-family:'Noto Serif KR',serif;font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);}
+.logo-dot{width:8px;height:8px;background:var(--green);border-radius:50%;}
+.main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:2.5rem;width:100%;max-width:400px;}
+.title{font-family:'Noto Serif KR',serif;font-size:1.5rem;font-weight:700;margin-bottom:.4rem;}
+.sub{font-size:.85rem;color:var(--muted);margin-bottom:2rem;}
+label{font-size:.82rem;font-weight:500;color:#444;display:block;margin-bottom:5px;}
+input{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;font-size:.9rem;font-family:'Noto Sans KR',sans-serif;color:var(--ink);background:#fff;outline:none;transition:border-color .2s;margin-bottom:1rem;}
+input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,199,90,.1);}
+.btn{width:100%;padding:14px;border-radius:10px;border:none;font-size:.95rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;background:var(--green);color:#fff;transition:all .2s;}
+.btn:hover{background:var(--green-dark);}
+.btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
+.alert{padding:10px 12px;border-radius:8px;font-size:.82rem;margin-bottom:1rem;display:none;}
+.alert.visible{display:block;}
+.alert-error{background:#fff0f0;border:1px solid #ffc0c0;color:#a00;}
+.switch{text-align:center;font-size:.82rem;color:var(--muted);margin-top:1rem;}
+.switch a{color:var(--green-dark);font-weight:600;text-decoration:none;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<nav><a class="logo" href="index.html"><div class="logo-dot"></div>리뷰메이트</a></nav>
+<div class="main">
+  <div class="card">
+    <div class="title">로그인</div>
+    <div class="sub">계정에 로그인하세요</div>
+    <div class="alert alert-error" id="loginError"></div>
+    <label>이메일</label>
+    <input type="email" id="email" placeholder="hello@example.com">
+    <label>비밀번호</label>
+    <input type="password" id="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')handleLogin()">
+    <button class="btn" id="loginBtn" onclick="handleLogin()">로그인</button>
+    <div class="switch">계정이 없으신가요? <a href="signup.html">회원가입</a></div>
+  </div>
+</div>
+<script>
+async function handleLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const alertEl = document.getElementById('loginError');
+  if (!email || !password) { alertEl.textContent='이메일과 비밀번호를 입력해주세요.'; alertEl.className='alert alert-error visible'; return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 로그인 중...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    window.location.href = '/dashboard.html';
+  } catch(err) {
+    alertEl.textContent = err.message || '로그인 실패';
+    alertEl.className = 'alert alert-error visible';
+    btn.disabled = false; btn.textContent = '로그인';
+  }
+}
+</script>
+</body>
+</html>

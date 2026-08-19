@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>회원가입 — 리뷰메이트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#999;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
+nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;height:58px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'Noto Serif KR',serif;font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);}
+.logo-dot{width:8px;height:8px;background:var(--green);border-radius:50%;}
+.main{flex:1;display:grid;grid-template-columns:1fr 400px;align-items:start;gap:2rem;max-width:900px;margin:0 auto;padding:3rem 2rem;width:100%;}
+.plan-summary{background:var(--card);border:1.5px solid var(--green);border-radius:20px;padding:2rem;position:sticky;top:80px;}
+.plan-badge{background:var(--green);color:#fff;font-size:.72rem;font-weight:700;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:1rem;}
+.plan-price-big{font-family:'Noto Serif KR',serif;font-size:2.6rem;font-weight:900;margin-bottom:.3rem;line-height:1;}
+.plan-price-big span{font-size:1rem;font-weight:400;color:var(--muted);}
+.plan-desc{font-size:.82rem;color:var(--muted);margin-bottom:1.4rem;line-height:1.6;}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:.6rem;}
+.plan-features li{font-size:.82rem;color:var(--ink-light);display:flex;align-items:center;gap:8px;}
+.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0;}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:2.5rem;}
+.auth-title{font-family:'Noto Serif KR',serif;font-size:1.5rem;font-weight:700;margin-bottom:.4rem;}
+.auth-sub{font-size:.85rem;color:var(--muted);margin-bottom:2rem;line-height:1.6;}
+label{font-size:.82rem;font-weight:500;color:var(--ink-light);display:block;margin-bottom:5px;}
+input{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;font-size:.9rem;font-family:'Noto Sans KR',sans-serif;color:var(--ink);background:#fff;outline:none;transition:border-color .2s;}
+input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,199,90,.1);}
+.form-row{margin-bottom:1rem;}
+.btn{width:100%;padding:14px;border-radius:10px;border:none;font-size:.95rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .2s;margin-top:.5rem;}
+.btn-primary{background:var(--green);color:#fff;}
+.btn-primary:hover{background:var(--green-dark);}
+.btn-primary:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
+.alert{padding:10px 12px;border-radius:8px;font-size:.82rem;margin-bottom:1rem;display:none;line-height:1.6;}
+.alert.visible{display:block;}
+.alert-error{background:#fff0f0;border:1px solid #ffc0c0;color:#a00;}
+.auth-switch{text-align:center;font-size:.82rem;color:var(--muted);margin-top:1rem;}
+.auth-switch a{color:var(--green-dark);font-weight:600;text-decoration:none;}
+.terms{font-size:.72rem;color:var(--muted);margin-top:.8rem;line-height:1.6;text-align:center;}
+.terms a{color:var(--green-dark);}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:680px){.main{grid-template-columns:1fr;}.plan-summary{display:none;}}
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html"><div class="logo-dot"></div>리뷰메이트</a>
+</nav>
+<div class="main">
+  <!-- 왼쪽: 가입 폼 -->
+  <div class="auth-card">
+    <h1 class="auth-title">무료로 시작하기</h1>
+    <p class="auth-sub">7일 무료 체험 후 월 9,900원 · 언제든지 해지 가능</p>
+    <div class="alert alert-error" id="signupError"></div>
+    <div class="form-row"><label>이메일</label><input type="email" id="email" placeholder="hello@example.com"></div>
+    <div class="form-row"><label>비밀번호</label><input type="password" id="password" placeholder="8자 이상 입력"></div>
+    <div class="form-row"><label>매장명</label><input type="text" id="storeName" placeholder="예: 홍길동 떡볶이"></div>
+    <button class="btn btn-primary" id="signupBtn" onclick="handleSignup()">7일 무료 체험 시작하기</button>
+    <p class="terms">가입 시 <a href="#">이용약관</a> 및 <a href="#">개인정보처리방침</a>에 동의합니다</p>
+    <div style="height:1px;background:var(--border);margin:1.2rem 0;"></div>
+    <div class="auth-switch">이미 계정이 있으신가요? <a href="login.html">로그인</a></div>
+  </div>
+
+  <!-- 오른쪽: 플랜 요약 -->
+  <div class="plan-summary">
+    <div class="plan-badge">7일 무료 체험</div>
+    <div class="plan-price-big">9,900<span>원/월</span></div>
+    <div class="plan-desc">체험 후 자동 결제 · 카드 등록 필요 · 언제든지 해지 가능</div>
+    <ul class="plan-features">
+      <li>AI 답변 자동 생성 (월 무제한)</li>
+      <li>6가지 톤앤매너 맞춤 설정</li>
+      <li>미답변 리뷰 자동 감지 & 처리</li>
+      <li>봇 감지 방지 기술 적용</li>
+      <li>실시간 처리 현황 대시보드</li>
+      <li>이메일 고객 지원</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+async function handleSignup() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const storeName = document.getElementById('storeName').value.trim();
+  const alertEl = document.getElementById('signupError');
+
+  if (!email || !password || !storeName) { alertEl.textContent='모든 항목을 입력해주세요.'; alertEl.className='alert alert-error visible'; return; }
+  if (password.length < 8) { alertEl.textContent='비밀번호는 8자 이상이어야 합니다.'; alertEl.className='alert alert-error visible'; return; }
+
+  const btn = document.getElementById('signupBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 처리중...';
+
+  try {
+    const res = await fetch('/api/auth/signup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password, storeName, plan:'standard' })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    window.location.href = `/payment.html?userId=${data.userId}`;
+  } catch(err) {
+    alertEl.textContent = err.message || '오류가 발생했습니다.';
+    alertEl.className = 'alert alert-error visible';
+    btn.disabled = false; btn.textContent = '7일 무료 체험 시작하기';
+  }
+}
+</script>
+</body>
+</html>
