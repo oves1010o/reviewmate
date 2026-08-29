@@ -73,7 +73,8 @@ function render() {
         <b>${r.tokens}개 · ${r.amount.toLocaleString()}원</b>
         <div class="meta">
           ${r.storeName || '(매장명 없음)'} · ${r.email}<br>
-          입금자명: <b>${r.depositorName}</b> · 신청일: ${new Date(r.requestedAt).toLocaleString('ko-KR')}
+          입금자명: <b>${r.depositorName}</b> · 신청일: ${new Date(r.requestedAt).toLocaleString('ko-KR')}<br>
+          ${r.baseAmount != null ? `토큰 금액 ${r.baseAmount.toLocaleString()}원 + 부가세 ${r.vat.toLocaleString()}원` : ''}
         </div>
       </div>
       ${r.status === 'pending'

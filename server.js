@@ -248,10 +248,14 @@ app.post('/api/charge/request', requireAuth, async (req, res) => {
   if (!tokens || tokens < 1) return res.status(400).json({ error: '충전할 토큰 개수를 입력해주세요.' });
   if (!depositorName) return res.status(400).json({ error: '입금자명을 입력해주세요.' });
 
+  const baseAmount = tokens * TOKEN_PRICE_KRW;
+  const vat = Math.round(baseAmount * 0.1);
   const request = {
     id: generateId(),
     tokens,
-    amount: tokens * TOKEN_PRICE_KRW,
+    baseAmount,
+    vat,
+    amount: baseAmount + vat, // 부가세 포함 실제 입금액
     depositorName,
     status: 'pending',
     requestedAt: new Date().toISOString()

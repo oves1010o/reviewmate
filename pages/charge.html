@@ -103,9 +103,12 @@ input[type=text]:focus{outline:none;border-color:var(--green);}
 
     <div>
       <div class="widget-wrap">
-        <div class="order-summary">
-          <span>충전 금액</span>
-          <b id="orderAmount">0원</b>
+        <div class="order-summary" style="flex-direction:column;align-items:stretch;gap:.5rem">
+          <div style="display:flex;justify-content:space-between"><span>토큰 금액</span><span id="baseAmount">0원</span></div>
+          <div style="display:flex;justify-content:space-between;color:var(--muted)"><span>부가세 (VAT 10%)</span><span id="vatAmount">0원</span></div>
+          <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:.6rem;font-weight:700">
+            <span>총 입금액</span><b id="orderAmount" style="color:var(--green-dark)">0원</b>
+          </div>
         </div>
 
         <div class="bank-box">
@@ -137,11 +140,17 @@ let selectedTokens = 0;
 const TOKEN_PRICE = 100;
 let bankInfo = { bank: '토스뱅크', account: '1000-0550-0556', holder: '김동욱' };
 
+function calcAmounts(tokens) {
+  const base = tokens * TOKEN_PRICE;
+  const vat = Math.round(base * 0.1);
+  return { base, vat, total: base + vat };
+}
+
 function updatePayBtnState() {
   const btn = document.getElementById('payBtn');
-  const amount = selectedTokens * TOKEN_PRICE;
+  const { total } = calcAmounts(selectedTokens);
   btn.disabled = selectedTokens < 1;
-  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 입금 신청하기' : `${selectedTokens}개 (${amount.toLocaleString()}원) 입금 신청하기`;
+  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 입금 신청하기' : `${selectedTokens}개 (${total.toLocaleString()}원) 입금 신청하기`;
 }
 
 async function loadBalance() {
@@ -177,8 +186,10 @@ function selectPkg(tokens, fromCustom) {
     b.classList.toggle('selected', !fromCustom && parseInt(b.dataset.tokens) === selectedTokens);
   });
   if (!fromCustom) document.getElementById('customTokens').value = '';
-  const amount = selectedTokens * TOKEN_PRICE;
-  document.getElementById('orderAmount').textContent = amount.toLocaleString() + '원';
+  const { base, vat, total } = calcAmounts(selectedTokens);
+  document.getElementById('baseAmount').textContent = base.toLocaleString() + '원';
+  document.getElementById('vatAmount').textContent = vat.toLocaleString() + '원';
+  document.getElementById('orderAmount').textContent = total.toLocaleString() + '원';
   updatePayBtnState();
 }
 
@@ -197,7 +208,7 @@ async function loadRequests() {
     list.innerHTML = requests.map(r => `
       <div class="req-item">
         <div class="req-left">
-          <div>${r.tokens}개 · ${r.amount.toLocaleString()}원</div>
+          <div>${r.tokens}개 · ${r.amount.toLocaleString()}원 <span style="color:var(--muted);font-weight:400">(부가세 포함)</span></div>
           <div style="font-size:.72rem;color:var(--muted);margin-top:2px">${new Date(r.requestedAt).toLocaleString('ko-KR')} · 입금자: ${r.depositorName}</div>
         </div>
         <span class="badge badge-${r.status}">${statusLabel[r.status] || r.status}</span>
@@ -227,6 +238,8 @@ async function submitRequest() {
     document.getElementById('depositorName').value = '';
     selectedTokens = 0;
     document.querySelectorAll('.pkg-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById('baseAmount').textContent = '0원';
+    document.getElementById('vatAmount').textContent = '0원';
     document.getElementById('orderAmount').textContent = '0원';
     loadRequests();
   } catch(e) {
