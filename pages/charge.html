@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>토큰 충전 — 리뷰메이트</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://js.tosspayments.com/v1"></script>
 <style>
-:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;--yellow:#fff8e1;--yellow-ink:#a06a00;--red:#e03131;--red-bg:#fff0f0;}
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
 nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;height:58px;display:flex;align-items:center;justify-content:space-between;}
@@ -32,17 +31,30 @@ nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;
 .feat-list{list-style:none;display:flex;flex-direction:column;gap:.6rem;}
 .feat-list li{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--ink-light);}
 .feat-list li::before{content:'✓';color:var(--green);font-weight:700;}
-.widget-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;}
+.widget-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;margin-bottom:1.5rem;}
 .order-summary{background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1.2rem;display:flex;justify-content:space-between;font-size:.88rem;}
 .order-summary b{font-size:1.05rem;color:var(--green-dark);}
-#payment-widget{margin-bottom:1rem;}
-#agreement-widget{margin-bottom:1.5rem;}
+.bank-box{background:var(--yellow);border-radius:12px;padding:1.2rem;margin-bottom:1.2rem;}
+.bank-box-label{font-size:.76rem;color:var(--yellow-ink);font-weight:700;margin-bottom:.6rem;}
+.bank-row{display:flex;justify-content:space-between;align-items:center;font-size:.95rem;font-weight:700;margin-bottom:.3rem;}
+.bank-copy{font-size:.72rem;font-weight:600;color:var(--green-dark);background:#fff;border:1px solid var(--green);border-radius:6px;padding:3px 9px;cursor:pointer;}
+.bank-holder{font-size:.8rem;color:var(--muted);}
+label{font-size:.82rem;font-weight:600;color:var(--ink-light);display:block;margin-bottom:6px;}
+input[type=text]{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;font-size:.9rem;font-family:'Noto Sans KR',sans-serif;margin-bottom:1.2rem;}
+input[type=text]:focus{outline:none;border-color:var(--green);}
 .btn-pay{width:100%;padding:15px;border-radius:12px;border:none;background:var(--green);color:#fff;font-size:1rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .2s;}
 .btn-pay:hover{background:var(--green-dark);}
 .btn-pay:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
 .pay-note{font-size:.72rem;color:var(--muted);text-align:center;margin-top:.8rem;line-height:1.7;}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg)}}
+.req-title{font-size:.9rem;font-weight:700;margin-bottom:1rem;}
+.req-item{display:flex;justify-content:space-between;align-items:center;padding:.8rem 0;border-bottom:1px solid var(--border);font-size:.85rem;}
+.req-item:last-child{border-bottom:none;}
+.req-left{color:var(--ink-light);}
+.badge{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:20px;}
+.badge-pending{background:var(--yellow);color:var(--yellow-ink);}
+.badge-approved{background:var(--green-light);color:var(--green-dark);}
+.badge-rejected{background:var(--red-bg);color:var(--red);}
+.empty-req{text-align:center;color:var(--muted);font-size:.85rem;padding:1.5rem 0;}
 @media(max-width:680px){.layout{grid-template-columns:1fr;}.pkg-grid{grid-template-columns:1fr 1fr;}}
 </style>
 </head>
@@ -89,33 +101,47 @@ nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;
       </ul>
     </div>
 
-    <div class="widget-wrap">
-      <div class="order-summary">
-        <span>충전 금액</span>
-        <b id="orderAmount">0원</b>
+    <div>
+      <div class="widget-wrap">
+        <div class="order-summary">
+          <span>충전 금액</span>
+          <b id="orderAmount">0원</b>
+        </div>
+
+        <div class="bank-box">
+          <div class="bank-box-label">⚡ 아래 계좌로 입금해주세요</div>
+          <div class="bank-row">
+            <span id="bankText">토스뱅크 1000-0550-0556</span>
+            <button class="bank-copy" onclick="copyAccount()">복사</button>
+          </div>
+          <div class="bank-holder">예금주: 김동욱</div>
+        </div>
+
+        <label>입금자명</label>
+        <input type="text" id="depositorName" placeholder="실제 입금하실 분 성함을 입력해주세요">
+
+        <button class="btn-pay" id="payBtn" onclick="submitRequest()" disabled>토큰 선택 후 입금 신청하기</button>
+        <p class="pay-note">입금 확인 후 사장님이 승인하면 토큰이 지급됩니다 (영업일 기준 확인 후 처리)</p>
       </div>
-      <p style="font-size:.82rem;color:var(--muted);margin-bottom:1.4rem;line-height:1.6">결제하기 버튼을 누르면 토스페이먼츠 카드 결제 페이지로 이동합니다.</p>
-      <button class="btn-pay" id="payBtn" onclick="handlePay()" disabled>토큰 선택 후 결제하기</button>
-      <p class="pay-note">토스페이먼츠 안전 결제 · 결제 즉시 토큰이 지급됩니다</p>
+
+      <div class="widget-wrap">
+        <div class="req-title">충전 요청 내역</div>
+        <div id="reqList"><div class="empty-req">불러오는 중...</div></div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-const tossPayments = TossPayments('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN');
 let selectedTokens = 0;
 const TOKEN_PRICE = 100;
+let bankInfo = { bank: '토스뱅크', account: '1000-0550-0556', holder: '김동욱' };
 
 function updatePayBtnState() {
   const btn = document.getElementById('payBtn');
   const amount = selectedTokens * TOKEN_PRICE;
-  if (selectedTokens < 1) {
-    btn.disabled = true;
-    btn.textContent = '토큰 선택 후 결제하기';
-  } else {
-    btn.disabled = false;
-    btn.textContent = `${selectedTokens}개 충전하기 (${amount.toLocaleString()}원)`;
-  }
+  btn.disabled = selectedTokens < 1;
+  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 입금 신청하기' : `${selectedTokens}개 (${amount.toLocaleString()}원) 입금 신청하기`;
 }
 
 async function loadBalance() {
@@ -125,6 +151,24 @@ async function loadBalance() {
     const data = await res.json();
     document.getElementById('currentBalance').textContent = `${data.tokens || 0}개`;
   } catch(e) { window.location.href = 'login.html'; }
+}
+
+async function loadBankInfo() {
+  try {
+    const res = await fetch('/api/charge/bank-info', { credentials: 'include' });
+    if (!res.ok) return;
+    bankInfo = await res.json();
+    document.getElementById('bankText').textContent = `${bankInfo.bank} ${bankInfo.account}`;
+    document.querySelector('.bank-holder').textContent = `예금주: ${bankInfo.holder}`;
+  } catch(e) {}
+}
+
+function copyAccount() {
+  navigator.clipboard.writeText(bankInfo.account.replace(/-/g, ''));
+  const btn = document.querySelector('.bank-copy');
+  const orig = btn.textContent;
+  btn.textContent = '복사됨!';
+  setTimeout(() => btn.textContent = orig, 1200);
 }
 
 function selectPkg(tokens, fromCustom) {
@@ -138,36 +182,64 @@ function selectPkg(tokens, fromCustom) {
   updatePayBtnState();
 }
 
-loadBalance();
-updatePayBtnState();
+const statusLabel = { pending: '대기중', approved: '승인됨', rejected: '거절됨' };
 
-async function handlePay() {
+async function loadRequests() {
+  try {
+    const res = await fetch('/api/charge/requests', { credentials: 'include' });
+    const data = await res.json();
+    const list = document.getElementById('reqList');
+    const requests = data.requests || [];
+    if (!requests.length) {
+      list.innerHTML = '<div class="empty-req">아직 충전 요청이 없습니다</div>';
+      return;
+    }
+    list.innerHTML = requests.map(r => `
+      <div class="req-item">
+        <div class="req-left">
+          <div>${r.tokens}개 · ${r.amount.toLocaleString()}원</div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:2px">${new Date(r.requestedAt).toLocaleString('ko-KR')} · 입금자: ${r.depositorName}</div>
+        </div>
+        <span class="badge badge-${r.status}">${statusLabel[r.status] || r.status}</span>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+async function submitRequest() {
   if (selectedTokens < 1) return;
+  const depositorName = document.getElementById('depositorName').value.trim();
+  if (!depositorName) { alert('입금자명을 입력해주세요.'); return; }
+
   const btn = document.getElementById('payBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> 이동중...';
+  btn.textContent = '신청 중...';
   try {
-    const prepRes = await fetch('/api/charge/prepare', {
+    const res = await fetch('/api/charge/request', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tokens: selectedTokens })
+      body: JSON.stringify({ tokens: selectedTokens, depositorName })
     });
-    const order = await prepRes.json();
-    if (!prepRes.ok) throw new Error(order.error || '주문 생성 실패');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '신청 실패');
 
-    await tossPayments.requestPayment('카드', {
-      amount: order.amount,
-      orderId: order.orderId,
-      orderName: order.orderName,
-      successUrl: `${location.origin}/charge-success.html`,
-      failUrl: `${location.origin}/charge-fail.html`,
-      customerName: '사장님'
-    });
+    alert(`입금 신청이 접수되었습니다!\n\n${bankInfo.bank} ${bankInfo.account} (${bankInfo.holder})\n으로 ${data.request.amount.toLocaleString()}원을 입금해주세요.\n\n입금 확인 후 토큰이 지급됩니다.`);
+    document.getElementById('depositorName').value = '';
+    selectedTokens = 0;
+    document.querySelectorAll('.pkg-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById('orderAmount').textContent = '0원';
+    loadRequests();
   } catch(e) {
-    alert('결제 요청 중 오류: ' + e.message);
+    alert('오류: ' + e.message);
+  } finally {
     updatePayBtnState();
   }
 }
+
+loadBalance();
+loadBankInfo();
+loadRequests();
+updatePayBtnState();
 </script>
 </body>
 </html>

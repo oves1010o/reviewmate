@@ -229,6 +229,94 @@ app.post('/api/charge/confirm', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// 토큰 충전 API (계좌 입금 신청 → 사장님 수동 승인)
+// ══════════════════════════════════════════════════════════════════════════
+
+const CHARGE_BANK_INFO = {
+  bank: '토스뱅크',
+  account: '1000-0550-0556',
+  holder: '김동욱'
+};
+
+app.get('/api/charge/bank-info', requireAuth, (req, res) => {
+  res.json(CHARGE_BANK_INFO);
+});
+
+app.post('/api/charge/request', requireAuth, async (req, res) => {
+  const tokens = parseInt(req.body.tokens);
+  const depositorName = (req.body.depositorName || '').trim();
+  if (!tokens || tokens < 1) return res.status(400).json({ error: '충전할 토큰 개수를 입력해주세요.' });
+  if (!depositorName) return res.status(400).json({ error: '입금자명을 입력해주세요.' });
+
+  const request = {
+    id: generateId(),
+    tokens,
+    amount: tokens * TOKEN_PRICE_KRW,
+    depositorName,
+    status: 'pending',
+    requestedAt: new Date().toISOString()
+  };
+  req.user.chargeRequests = req.user.chargeRequests || [];
+  req.user.chargeRequests.unshift(request);
+  db.users.set(req.user.userId, req.user);
+  await saveDB();
+  res.json({ success: true, request });
+});
+
+app.get('/api/charge/requests', requireAuth, (req, res) => {
+  res.json({ requests: req.user.chargeRequests || [] });
+});
+
+// ── 관리자(사장님)용 입금 승인 API ──────────────────────────────────────────
+const ADMIN_EMAILS = ['oves1010o@gmail.com'];
+
+function requireAdmin(req, res, next) {
+  if (!ADMIN_EMAILS.includes(req.user.email)) {
+    return res.status(403).json({ error: '관리자만 접근할 수 있습니다.' });
+  }
+  next();
+}
+
+app.get('/api/admin/charge-requests', requireAuth, requireAdmin, (req, res) => {
+  const all = [];
+  for (const [, u] of db.users) {
+    for (const r of (u.chargeRequests || [])) {
+      all.push({ ...r, userId: u.userId, email: u.email, storeName: u.storeName });
+    }
+  }
+  all.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+  res.json({ requests: all });
+});
+
+app.post('/api/admin/charge-requests/:userId/:requestId/approve', requireAuth, requireAdmin, async (req, res) => {
+  const targetUser = db.users.get(req.params.userId);
+  if (!targetUser) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
+  const request = (targetUser.chargeRequests || []).find(r => r.id === req.params.requestId);
+  if (!request) return res.status(404).json({ error: '요청을 찾을 수 없습니다.' });
+  if (request.status !== 'pending') return res.status(400).json({ error: '이미 처리된 요청입니다.' });
+
+  request.status = 'approved';
+  request.approvedAt = new Date().toISOString();
+  targetUser.tokens = (targetUser.tokens || 0) + request.tokens;
+  db.users.set(targetUser.userId, targetUser);
+  await saveDB();
+  res.json({ success: true, tokens: targetUser.tokens });
+});
+
+app.post('/api/admin/charge-requests/:userId/:requestId/reject', requireAuth, requireAdmin, async (req, res) => {
+  const targetUser = db.users.get(req.params.userId);
+  if (!targetUser) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
+  const request = (targetUser.chargeRequests || []).find(r => r.id === req.params.requestId);
+  if (!request) return res.status(404).json({ error: '요청을 찾을 수 없습니다.' });
+  if (request.status !== 'pending') return res.status(400).json({ error: '이미 처리된 요청입니다.' });
+
+  request.status = 'rejected';
+  db.users.set(targetUser.userId, targetUser);
+  await saveDB();
+  res.json({ success: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // 네이버 자동화 API
 // ══════════════════════════════════════════════════════════════════════════
 

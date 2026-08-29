@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>충전 승인 관리 — 리뷰메이트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;--yellow:#fff8e1;--yellow-ink:#a06a00;--red:#e03131;--red-bg:#fff0f0;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;height:58px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'Noto Serif KR',serif;font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);}
+.logo-dot{width:8px;height:8px;background:var(--green);border-radius:50%;}
+.main{max-width:900px;margin:0 auto;padding:2.5rem 2rem;}
+h1{font-family:'Noto Serif KR',serif;font-size:1.4rem;margin-bottom:1.6rem;}
+.tabs{display:flex;gap:.5rem;margin-bottom:1.4rem;}
+.tab-btn{padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:#fff;font-size:.82rem;font-weight:600;cursor:pointer;color:var(--ink-light);}
+.tab-btn.active{border-color:var(--green);background:var(--green-light);color:var(--green-dark);}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.4rem 1.6rem;margin-bottom:.9rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;}
+.card-info b{font-size:1rem;}
+.card-info .meta{font-size:.8rem;color:var(--muted);margin-top:4px;line-height:1.6;}
+.card-actions{display:flex;gap:8px;}
+.btn{padding:9px 18px;border-radius:9px;border:none;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn-approve{background:var(--green);color:#fff;}
+.btn-approve:hover{background:var(--green-dark);}
+.btn-reject{background:#fff;color:var(--red);border:1.5px solid var(--red);}
+.btn-reject:hover{background:var(--red-bg);}
+.badge{font-size:.72rem;font-weight:700;padding:4px 12px;border-radius:20px;}
+.badge-pending{background:var(--yellow);color:var(--yellow-ink);}
+.badge-approved{background:var(--green-light);color:var(--green-dark);}
+.badge-rejected{background:var(--red-bg);color:var(--red);}
+.empty{text-align:center;color:var(--muted);padding:3rem 0;}
+.denied{text-align:center;padding:4rem 2rem;color:var(--muted);}
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="dashboard.html"><div class="logo-dot"></div>리뷰메이트 관리자</a>
+</nav>
+<div class="main" id="mainArea">
+  <h1>충전 승인 관리</h1>
+  <div class="tabs">
+    <button class="tab-btn active" data-status="pending" onclick="setFilter('pending')">대기중</button>
+    <button class="tab-btn" data-status="approved" onclick="setFilter('approved')">승인됨</button>
+    <button class="tab-btn" data-status="rejected" onclick="setFilter('rejected')">거절됨</button>
+    <button class="tab-btn" data-status="all" onclick="setFilter('all')">전체</button>
+  </div>
+  <div id="list"><div class="empty">불러오는 중...</div></div>
+</div>
+
+<script>
+let allRequests = [];
+let filter = 'pending';
+const statusLabel = { pending: '대기중', approved: '승인됨', rejected: '거절됨' };
+
+function setFilter(f) {
+  filter = f;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.status === f));
+  render();
+}
+
+function render() {
+  const list = document.getElementById('list');
+  const filtered = filter === 'all' ? allRequests : allRequests.filter(r => r.status === filter);
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty">해당 상태의 요청이 없습니다</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(r => `
+    <div class="card">
+      <div class="card-info">
+        <b>${r.tokens}개 · ${r.amount.toLocaleString()}원</b>
+        <div class="meta">
+          ${r.storeName || '(매장명 없음)'} · ${r.email}<br>
+          입금자명: <b>${r.depositorName}</b> · 신청일: ${new Date(r.requestedAt).toLocaleString('ko-KR')}
+        </div>
+      </div>
+      ${r.status === 'pending'
+        ? `<div class="card-actions">
+             <button class="btn btn-approve" onclick="act('${r.userId}','${r.id}','approve')">✓ 승인</button>
+             <button class="btn btn-reject" onclick="act('${r.userId}','${r.id}','reject')">✕ 거절</button>
+           </div>`
+        : `<span class="badge badge-${r.status}">${statusLabel[r.status]}</span>`
+      }
+    </div>
+  `).join('');
+}
+
+async function loadRequests() {
+  try {
+    const res = await fetch('/api/admin/charge-requests', { credentials: 'include' });
+    if (res.status === 403) {
+      document.getElementById('mainArea').innerHTML = '<div class="denied">🔒 관리자만 접근할 수 있는 페이지입니다.</div>';
+      return;
+    }
+    if (res.status === 401) { window.location.href = 'login.html'; return; }
+    const data = await res.json();
+    allRequests = data.requests || [];
+    render();
+  } catch(e) {
+    document.getElementById('list').innerHTML = '<div class="empty">불러오기 실패</div>';
+  }
+}
+
+async function act(userId, requestId, action) {
+  const label = action === 'approve' ? '승인' : '거절';
+  if (!confirm(`이 요청을 ${label}하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`/api/admin/charge-requests/${userId}/${requestId}/${action}`, {
+      method: 'POST', credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '처리 실패');
+    await loadRequests();
+  } catch(e) {
+    alert('오류: ' + e.message);
+  }
+}
+
+loadRequests();
+</script>
+</body>
+</html>
