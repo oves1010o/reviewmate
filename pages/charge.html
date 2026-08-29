@@ -105,7 +105,23 @@ nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;
 <script>
 let paymentWidget;
 let selectedTokens = 0;
+let widgetReady = false;
 const TOKEN_PRICE = 100;
+
+function updatePayBtnState() {
+  const btn = document.getElementById('payBtn');
+  const amount = selectedTokens * TOKEN_PRICE;
+  if (!widgetReady) {
+    btn.disabled = true;
+    btn.textContent = '결제 위젯 불러오는 중...';
+  } else if (selectedTokens < 1) {
+    btn.disabled = true;
+    btn.textContent = '토큰 선택 후 결제하기';
+  } else {
+    btn.disabled = false;
+    btn.textContent = `${selectedTokens}개 충전하기 (${amount.toLocaleString()}원)`;
+  }
+}
 
 async function loadBalance() {
   try {
@@ -116,7 +132,7 @@ async function loadBalance() {
   } catch(e) { window.location.href = 'login.html'; }
 }
 
-function selectPkg(tokens, fromCustom) {
+async function selectPkg(tokens, fromCustom) {
   selectedTokens = tokens || 0;
   document.querySelectorAll('.pkg-btn').forEach(b => {
     b.classList.toggle('selected', !fromCustom && parseInt(b.dataset.tokens) === selectedTokens);
@@ -124,9 +140,10 @@ function selectPkg(tokens, fromCustom) {
   if (!fromCustom) document.getElementById('customTokens').value = '';
   const amount = selectedTokens * TOKEN_PRICE;
   document.getElementById('orderAmount').textContent = amount.toLocaleString() + '원';
-  const btn = document.getElementById('payBtn');
-  btn.disabled = selectedTokens < 1;
-  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 결제하기' : `${selectedTokens}개 충전하기 (${amount.toLocaleString()}원)`;
+  updatePayBtnState();
+  if (widgetReady && amount > 0) {
+    try { await paymentWidget.updateAmount(amount); } catch(e) {}
+  }
 }
 
 (async () => {
@@ -135,14 +152,16 @@ function selectPkg(tokens, fromCustom) {
     paymentWidget = PaymentWidget('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN', PaymentWidget.ANONYMOUS);
     await paymentWidget.renderPaymentMethods('#payment-widget', { value: 0 });
     await paymentWidget.renderAgreement('#agreement-widget');
+    widgetReady = true;
   } catch(e) {
     document.getElementById('payment-widget').innerHTML =
       '<div style="padding:1.2rem;background:var(--bg);border-radius:10px;text-align:center;font-size:.85rem;color:var(--muted)">결제 위젯을 불러오지 못했습니다</div>';
   }
+  updatePayBtnState();
 })();
 
 async function handlePay() {
-  if (selectedTokens < 1) return;
+  if (selectedTokens < 1 || !widgetReady) return;
   const btn = document.getElementById('payBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> 처리중...';
@@ -157,6 +176,7 @@ async function handlePay() {
 
     sessionStorage.setItem('pendingCharge', JSON.stringify(order));
 
+    await paymentWidget.updateAmount(order.amount);
     await paymentWidget.requestPayment({
       orderId: order.orderId,
       orderName: order.orderName,
@@ -166,7 +186,7 @@ async function handlePay() {
     });
   } catch(e) {
     alert('결제 요청 중 오류: ' + e.message);
-    selectPkg(selectedTokens);
+    updatePayBtnState();
   }
 }
 </script>
