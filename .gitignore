@@ -2,3 +2,4 @@
 .env.txt
 *.log
 db.json
+node_modules/

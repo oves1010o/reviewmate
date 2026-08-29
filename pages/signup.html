@@ -52,12 +52,12 @@ input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,199,90,.1);}
   <!-- 왼쪽: 가입 폼 -->
   <div class="auth-card">
     <h1 class="auth-title">무료로 시작하기</h1>
-    <p class="auth-sub">7일 무료 체험 후 월 9,900원 · 언제든지 해지 가능</p>
+    <p class="auth-sub">가입하면 무료 토큰 3개 지급 · 카드 등록 불필요</p>
     <div class="alert alert-error" id="signupError"></div>
     <div class="form-row"><label>이메일</label><input type="email" id="email" placeholder="hello@example.com"></div>
     <div class="form-row"><label>비밀번호</label><input type="password" id="password" placeholder="8자 이상 입력"></div>
     <div class="form-row"><label>매장명</label><input type="text" id="storeName" placeholder="예: 홍길동 떡볶이"></div>
-    <button class="btn btn-primary" id="signupBtn" onclick="handleSignup()">7일 무료 체험 시작하기</button>
+    <button class="btn btn-primary" id="signupBtn" onclick="handleSignup()">무료 토큰 받고 시작하기</button>
     <p class="terms">가입 시 <a href="#">이용약관</a> 및 <a href="#">개인정보처리방침</a>에 동의합니다</p>
     <div style="height:1px;background:var(--border);margin:1.2rem 0;"></div>
     <div class="auth-switch">이미 계정이 있으신가요? <a href="login.html">로그인</a></div>
@@ -65,11 +65,11 @@ input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,199,90,.1);}
 
   <!-- 오른쪽: 플랜 요약 -->
   <div class="plan-summary">
-    <div class="plan-badge">7일 무료 체험</div>
-    <div class="plan-price-big">9,900<span>원/월</span></div>
-    <div class="plan-desc">체험 후 자동 결제 · 카드 등록 필요 · 언제든지 해지 가능</div>
+    <div class="plan-badge">가입 즉시 무료 토큰 3개</div>
+    <div class="plan-price-big">100<span>원/토큰</span></div>
+    <div class="plan-desc">필요한 만큼만 충전해서 사용 · 정기결제 없음 · 100토큰 = 답변 100개</div>
     <ul class="plan-features">
-      <li>AI 답변 자동 생성 (월 무제한)</li>
+      <li>AI 답변 1회 생성 = 토큰 1개</li>
       <li>6가지 톤앤매너 맞춤 설정</li>
       <li>미답변 리뷰 자동 감지 & 처리</li>
       <li>봇 감지 방지 기술 적용</li>
@@ -99,7 +99,7 @@ async function handleSignup() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    window.location.href = `/payment.html?userId=${data.userId}`;
+    window.location.href = '/dashboard.html';
   } catch(err) {
     alertEl.textContent = err.message || '오류가 발생했습니다.';
     alertEl.className = 'alert alert-error visible';

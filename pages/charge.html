@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>토큰 충전 — 리뷰메이트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://js.tosspayments.com/v1/payment-widget"></script>
+<style>
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
+nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;height:58px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'Noto Serif KR',serif;font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);}
+.logo-dot{width:8px;height:8px;background:var(--green);border-radius:50%;}
+.back-link{font-size:.82rem;color:var(--muted);text-decoration:none;}
+.main{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:3rem 2rem;}
+.layout{display:grid;grid-template-columns:1fr 380px;gap:2rem;width:100%;max-width:820px;align-items:start;}
+.info-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;}
+.balance-box{background:var(--green-light);border-radius:14px;padding:1.4rem;margin-bottom:1.6rem;text-align:center;}
+.balance-label{font-size:.8rem;color:var(--green-dark);font-weight:600;margin-bottom:.3rem;}
+.balance-num{font-family:'Noto Serif KR',serif;font-size:2.2rem;font-weight:900;color:var(--green-dark);}
+.pkg-title{font-size:.9rem;font-weight:700;margin-bottom:.9rem;}
+.pkg-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem;margin-bottom:1.4rem;}
+.pkg-btn{border:1.5px solid var(--border);border-radius:12px;padding:1rem .6rem;background:#fff;cursor:pointer;text-align:center;transition:all .15s;font-family:inherit;}
+.pkg-btn:hover{border-color:var(--green);}
+.pkg-btn.selected{border-color:var(--green);background:var(--green-light);}
+.pkg-tokens{font-weight:700;font-size:1rem;}
+.pkg-price{font-size:.76rem;color:var(--muted);margin-top:.2rem;}
+.custom-row{display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);border-radius:10px;padding:.7rem .9rem;margin-bottom:1.6rem;}
+.custom-row input{flex:1;border:none;outline:none;font-size:.9rem;font-family:inherit;}
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:.6rem;}
+.feat-list li{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--ink-light);}
+.feat-list li::before{content:'✓';color:var(--green);font-weight:700;}
+.widget-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;}
+.order-summary{background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1.2rem;display:flex;justify-content:space-between;font-size:.88rem;}
+.order-summary b{font-size:1.05rem;color:var(--green-dark);}
+#payment-widget{margin-bottom:1rem;}
+#agreement-widget{margin-bottom:1.5rem;}
+.btn-pay{width:100%;padding:15px;border-radius:12px;border:none;background:var(--green);color:#fff;font-size:1rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .2s;}
+.btn-pay:hover{background:var(--green-dark);}
+.btn-pay:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
+.pay-note{font-size:.72rem;color:var(--muted);text-align:center;margin-top:.8rem;line-height:1.7;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:680px){.layout{grid-template-columns:1fr;}.pkg-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="dashboard.html"><div class="logo-dot"></div>리뷰메이트</a>
+  <a class="back-link" href="dashboard.html">← 대시보드로</a>
+</nav>
+
+<div class="main">
+  <div class="layout">
+    <div class="info-card">
+      <div class="balance-box">
+        <div class="balance-label">현재 보유 토큰</div>
+        <div class="balance-num" id="currentBalance">—</div>
+      </div>
+
+      <div class="pkg-title">충전할 토큰을 선택하세요 (1토큰 = 100원)</div>
+      <div class="pkg-grid" id="pkgGrid">
+        <button class="pkg-btn" data-tokens="100" onclick="selectPkg(100)">
+          <div class="pkg-tokens">100개</div>
+          <div class="pkg-price">10,000원</div>
+        </button>
+        <button class="pkg-btn" data-tokens="300" onclick="selectPkg(300)">
+          <div class="pkg-tokens">300개</div>
+          <div class="pkg-price">30,000원</div>
+        </button>
+        <button class="pkg-btn" data-tokens="1000" onclick="selectPkg(1000)">
+          <div class="pkg-tokens">1000개</div>
+          <div class="pkg-price">100,000원</div>
+        </button>
+      </div>
+
+      <div class="custom-row">
+        <span style="font-size:.85rem;color:var(--muted)">직접 입력</span>
+        <input type="number" id="customTokens" min="1" placeholder="토큰 개수" oninput="selectPkg(parseInt(this.value)||0, true)">
+        <span style="font-size:.85rem;color:var(--muted)">개</span>
+      </div>
+
+      <ul class="feat-list">
+        <li>AI 답변 1회 생성 = 토큰 1개 차감</li>
+        <li>토큰은 만료 없이 계속 사용 가능</li>
+        <li>필요한 만큼만 충전, 정기결제 없음</li>
+      </ul>
+    </div>
+
+    <div class="widget-wrap">
+      <div class="order-summary">
+        <span>충전 금액</span>
+        <b id="orderAmount">0원</b>
+      </div>
+      <div id="payment-widget"></div>
+      <div id="agreement-widget"></div>
+      <button class="btn-pay" id="payBtn" onclick="handlePay()" disabled>토큰 선택 후 결제하기</button>
+      <p class="pay-note">토스페이먼츠 안전 결제 · 결제 즉시 토큰이 지급됩니다</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let paymentWidget;
+let selectedTokens = 0;
+const TOKEN_PRICE = 100;
+
+async function loadBalance() {
+  try {
+    const res = await fetch('/api/user/me', { credentials: 'include' });
+    if (!res.ok) { window.location.href = 'login.html'; return; }
+    const data = await res.json();
+    document.getElementById('currentBalance').textContent = `${data.tokens || 0}개`;
+  } catch(e) { window.location.href = 'login.html'; }
+}
+
+function selectPkg(tokens, fromCustom) {
+  selectedTokens = tokens || 0;
+  document.querySelectorAll('.pkg-btn').forEach(b => {
+    b.classList.toggle('selected', !fromCustom && parseInt(b.dataset.tokens) === selectedTokens);
+  });
+  if (!fromCustom) document.getElementById('customTokens').value = '';
+  const amount = selectedTokens * TOKEN_PRICE;
+  document.getElementById('orderAmount').textContent = amount.toLocaleString() + '원';
+  const btn = document.getElementById('payBtn');
+  btn.disabled = selectedTokens < 1;
+  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 결제하기' : `${selectedTokens}개 충전하기 (${amount.toLocaleString()}원)`;
+}
+
+(async () => {
+  await loadBalance();
+  try {
+    paymentWidget = PaymentWidget('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN', PaymentWidget.ANONYMOUS);
+    await paymentWidget.renderPaymentMethods('#payment-widget', { value: 0 });
+    await paymentWidget.renderAgreement('#agreement-widget');
+  } catch(e) {
+    document.getElementById('payment-widget').innerHTML =
+      '<div style="padding:1.2rem;background:var(--bg);border-radius:10px;text-align:center;font-size:.85rem;color:var(--muted)">결제 위젯을 불러오지 못했습니다</div>';
+  }
+})();
+
+async function handlePay() {
+  if (selectedTokens < 1) return;
+  const btn = document.getElementById('payBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 처리중...';
+  try {
+    const prepRes = await fetch('/api/charge/prepare', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokens: selectedTokens })
+    });
+    const order = await prepRes.json();
+    if (!prepRes.ok) throw new Error(order.error || '주문 생성 실패');
+
+    sessionStorage.setItem('pendingCharge', JSON.stringify(order));
+
+    await paymentWidget.requestPayment({
+      orderId: order.orderId,
+      orderName: order.orderName,
+      successUrl: `${location.origin}/charge-success.html`,
+      failUrl: `${location.origin}/charge-fail.html`,
+      customerName: '사장님'
+    });
+  } catch(e) {
+    alert('결제 요청 중 오류: ' + e.message);
+    selectPkg(selectedTokens);
+  }
+}
+</script>
+</body>
+</html>

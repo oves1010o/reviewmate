@@ -19,6 +19,12 @@ app.use(session({
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Claude 응답에 'thinking' 블록이 먼저 올 수 있어 항상 첫 text 블록을 찾음
+function extractText(response) {
+  const block = response.content.find(c => c.type === 'text');
+  return block ? block.text.trim() : '';
+}
+
 // ── 단일 플랜 설정 ────────────────────────────────────────────────────────
 const PLAN = {
   name: '리뷰메이트 월정액',
@@ -102,26 +108,15 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// 플랜별 월 사용량 제한
-const PLAN_LIMITS = {
-  basic:    { price: 1000,  monthlyLimit: 25  },
-  standard: { price: 5000,  monthlyLimit: 130 },
-  pro:      { price: 9900,  monthlyLimit: 260 },
-};
+// ── 토큰(선불 크레딧) 설정 ──────────────────────────────────────────────
+const TOKEN_PRICE_KRW = 100; // 토큰 1개 = 100원 (100토큰 = 10,000원)
+const SIGNUP_FREE_TOKENS = 3; // 가입 시 무료 체험용 토큰
 
-function requireSubscription(req, res, next) {
-  // 테스트 모드: 구독 체크 우회 (실제 서비스 시 아래 주석 해제)
-  return next();
-  /*
-  const now = new Date();
-  const trialEnd = new Date(req.user.trialEndsAt);
-  const isTrialActive = now < trialEnd;
-  const isPaidActive = req.user.subscriptionActive;
-  if (!isTrialActive && !isPaidActive) {
-    return res.status(403).json({ error: '구독이 필요한 기능입니다. 결제를 완료해주세요.' });
+function requireTokens(req, res, next) {
+  if ((req.user.tokens || 0) < 1) {
+    return res.status(402).json({ error: '토큰이 부족합니다. 충전 후 이용해주세요.', code: 'NO_TOKENS' });
   }
   next();
-  */
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -136,24 +131,19 @@ app.post('/api/auth/signup', async (req, res) => {
     if (u.email === email) return res.status(409).json({ error: '이미 가입된 이메일입니다.' });
   }
 
-  const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + PLAN.trialDays);
-
   const userId = generateId();
   db.users.set(userId, {
     userId, email,
     password: await bcrypt.hash(password, 10),
-    storeName, plan: 'standard',
-    subscriptionActive: false,
-    trialEndsAt: trialEnd.toISOString(),
-    billingKey: null,
-    nextBillingDate: null,
+    storeName,
+    tokens: SIGNUP_FREE_TOKENS,
     naverId: null, naverPw: null, placeId: null,
     tone: 'warm', emphasis: '',
     usedThisMonth: 0,
     createdAt: new Date().toISOString()
   });
   await saveDB();
+  req.session.userId = userId; // 가입 즉시 로그인 처리
   res.json({ success: true, userId });
 });
 
@@ -180,9 +170,7 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/user/me', requireAuth, (req, res) => {
   const { password, naverPw, ...safe } = req.user;
-  const now = new Date();
-  safe.isTrialActive = now < new Date(req.user.trialEndsAt);
-  safe.trialDaysLeft = Math.max(0, Math.ceil((new Date(req.user.trialEndsAt) - now) / 86400000));
+  safe.tokens = req.user.tokens || 0;
   res.json(safe);
 });
 
@@ -196,52 +184,48 @@ app.put('/api/user/config', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// 토스페이먼츠 API
+// 토큰 충전 API (토스페이먼츠 일반결제, 1회성)
 // ══════════════════════════════════════════════════════════════════════════
 
-app.post('/api/payment/prepare', requireAuth, (req, res) => {
+app.post('/api/charge/prepare', requireAuth, (req, res) => {
+  const tokens = parseInt(req.body.tokens);
+  if (!tokens || tokens < 1) return res.status(400).json({ error: '충전할 토큰 개수를 입력해주세요.' });
+  const amount = tokens * TOKEN_PRICE_KRW;
   res.json({
     clientKey: process.env.TOSS_CLIENT_KEY || 'test_ck_여기에입력',
     customerKey: req.user.userId,
-    orderId: `order_${req.user.userId}_${Date.now()}`,
-    orderName: PLAN.name,
-    amount: 0 // 체험 기간이라 0원, 실제 결제는 빌링키로
+    orderId: `charge_${req.user.userId}_${Date.now()}`,
+    orderName: `리뷰메이트 토큰 ${tokens}개`,
+    amount,
+    tokens
   });
 });
 
-app.post('/api/payment/confirm', requireAuth, async (req, res) => {
-  const { authKey, customerKey } = req.body;
+app.post('/api/charge/confirm', requireAuth, async (req, res) => {
+  const { paymentKey, orderId, amount } = req.body;
+  if (!paymentKey || !orderId || !amount) return res.status(400).json({ error: '결제 정보가 올바르지 않습니다.' });
   try {
-    // 빌링키 발급
-    const tossRes = await fetch('https://api.tosspayments.com/v1/billing/authorizations/confirm', {
+    const tossRes = await fetch('https://api.tosspayments.com/v1/payments/confirm', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${Buffer.from(process.env.TOSS_SECRET_KEY + ':').toString('base64')}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ authKey, customerKey })
+      body: JSON.stringify({ paymentKey, orderId, amount })
     });
-    if (!tossRes.ok) throw new Error('빌링키 발급 실패');
     const tossData = await tossRes.json();
+    if (!tossRes.ok) throw new Error(tossData.message || '결제 승인 실패');
 
-    // 체험 종료 후 첫 결제일 설정
-    const nextBilling = new Date(req.user.trialEndsAt);
-    req.user.billingKey = tossData.billingKey;
-    req.user.nextBillingDate = nextBilling.toISOString().split('T')[0];
-    req.user.subscriptionActive = true;
+    // 토스가 실제로 승인한 금액 기준으로 토큰 지급 (클라이언트 값은 신뢰하지 않음)
+    const paidAmount = tossData.totalAmount;
+    const tokensToAdd = Math.floor(paidAmount / TOKEN_PRICE_KRW);
+    req.user.tokens = (req.user.tokens || 0) + tokensToAdd;
     db.users.set(req.user.userId, req.user);
     await saveDB();
-    res.json({ success: true });
+    res.json({ success: true, added: tokensToAdd, tokens: req.user.tokens });
   } catch(err) {
     res.status(400).json({ error: err.message });
   }
-});
-
-app.post('/api/subscription/cancel', requireAuth, async (req, res) => {
-  req.user.subscriptionActive = false;
-  db.users.set(req.user.userId, req.user);
-  await saveDB();
-  res.json({ success: true });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -553,10 +537,10 @@ ${user.emphasis ? `브랜드 강조 포인트: ${user.emphasis}` : ''}
 - 답변 맨 마지막 줄에 사용한 SEO 키워드를 #키워드 형태로 1~2개 자연스럽게 추가 (예: #부산역밀면 #부산맛집)`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514', max_tokens: 500,
+    model: 'claude-sonnet-5', max_tokens: 500,
     messages: [{ role: 'user', content: prompt }]
   });
-  return response.content[0].text.trim();
+  return extractText(response);
 }
 
 // SEO 키워드 AI 자동 추출
@@ -577,10 +561,10 @@ JSON 배열로만 답변: ["키워드1", "키워드2", "키워드3", "키워드4
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514', max_tokens: 200,
+      model: 'claude-sonnet-5', max_tokens: 200,
       messages: [{ role: 'user', content: prompt }]
     });
-    const text = response.content[0].text.trim();
+    const text = extractText(response);
     const keywords = JSON.parse(text);
     return Array.isArray(keywords) ? keywords : [];
   } catch(e) {
@@ -752,7 +736,7 @@ app.get('/api/login/status', async (req, res) => {
 });
 
 // 리뷰 목록
-app.get('/api/reviews', requireAuth, requireSubscription, async (req, res) => {
+app.get('/api/reviews', requireAuth, async (req, res) => {
   const days = parseInt(req.query.days) || 30; // 기본 30일
   try {
     const { page } = await getOrCreateBrowser(req.session.id);
@@ -786,7 +770,7 @@ app.get('/api/reviews', requireAuth, requireSubscription, async (req, res) => {
 });
 
 // AI 답변 생성
-app.post('/api/generate', requireAuth, requireSubscription, async (req, res) => {
+app.post('/api/generate', requireAuth, requireTokens, async (req, res) => {
   const { reviewText, useStyleAnalysis } = req.body;
   try {
     let existingReplies = [];
@@ -809,12 +793,18 @@ app.post('/api/generate', requireAuth, requireSubscription, async (req, res) => 
       }
     }
     const reply = await generateAIReply(req.user, reviewText, existingReplies);
-    res.json({ reply, styleAnalyzed: existingReplies.length > 0, replyCount: existingReplies.length });
+
+    // AI 답변 생성 1회 = 토큰 1개 차감
+    req.user.tokens = (req.user.tokens || 0) - 1;
+    db.users.set(req.user.userId, req.user);
+    await saveDB();
+
+    res.json({ reply, styleAnalyzed: existingReplies.length > 0, replyCount: existingReplies.length, tokensLeft: req.user.tokens });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 댓글 등록
-app.post('/api/reply', requireAuth, requireSubscription, async (req, res) => {
+app.post('/api/reply', requireAuth, async (req, res) => {
   const { reviewElementIdx, reviewText, replyText } = req.body;
   try {
     const { page } = await getOrCreateBrowser(req.session.id);
@@ -907,7 +897,7 @@ app.post('/api/reply', requireAuth, requireSubscription, async (req, res) => {
 });
 
 // 전체 자동 처리 (SSE)
-app.post('/api/auto-reply-all', requireAuth, requireSubscription, async (req, res) => {
+app.post('/api/auto-reply-all', requireAuth, async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   const send = d => res.write(`data: ${JSON.stringify(d)}\n\n`);
@@ -930,6 +920,10 @@ app.post('/api/auto-reply-all', requireAuth, requireSubscription, async (req, re
     send({ type: 'status', message: `미답변 리뷰 ${reviews.length}개 발견` });
     let success = 0, failed = 0;
     for (const [i, r] of reviews.entries()) {
+      if ((req.user.tokens || 0) < 1) {
+        send({ type: 'error', message: '토큰이 부족합니다. 충전 후 다시 시도해주세요.' });
+        break;
+      }
       send({ type: 'progress', current: i + 1, total: reviews.length, reviewText: r.text });
       try {
         const reply = await generateAIReply(req.user, r.text);
@@ -943,9 +937,11 @@ app.post('/api/auto-reply-all', requireAuth, requireSubscription, async (req, re
         const sb = await page.$('[class*="reply_submit"]');
         if (sb) { await delay(400); await sb.click(); }
         req.user.usedThisMonth++;
+        req.user.tokens = (req.user.tokens || 0) - 1; // AI 답변 생성 1회 = 토큰 1개 차감
         db.users.set(req.user.userId, req.user);
+        await saveDB();
         success++;
-        send({ type: 'replied', success: true });
+        send({ type: 'replied', success: true, tokensLeft: req.user.tokens });
         await delay(5000 + Math.random() * 10000);
       } catch(e) {
         failed++;
@@ -996,7 +992,7 @@ app.post('/api/cs-reply', requireAuth, async (req, res) => {
       max_tokens: 400,
       messages: [{ role: 'user', content: prompt }],
     });
-    res.json({ reply: response.content[0].text.trim() });
+    res.json({ reply: extractText(response) });
   } catch (err) {
     console.error('[CS Reply Error]', err.message);
     res.status(500).json({ error: err.message });
@@ -1029,7 +1025,7 @@ app.post('/api/reply/negative', requireAuth, async (req, res) => {
       max_tokens: 450,
       messages: [{ role: 'user', content: prompt }],
     });
-    res.json({ reply: response.content[0].text.trim() });
+    res.json({ reply: extractText(response) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1230,11 +1226,11 @@ app.post('/api/cs-chat', async (req, res) => {
 
     console.log('[cs-chat] calling anthropic...');
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514', max_tokens: 300,
+      model: 'claude-sonnet-5', max_tokens: 300,
       messages: [{ role: 'user', content: csPrompt }]
     });
     console.log('[cs-chat] done');
-    const reply = response?.content?.[0]?.text?.trim();
+    const reply = extractText(response);
     if (!reply) return res.status(502).json({ error: 'AI 응답이 비어있습니다.' });
     return res.json({ reply });
   } catch(err) {
@@ -1279,11 +1275,11 @@ app.post('/api/cs-helper', requireAuth, async (req, res) => {
 - 150자 내외, 답변 텍스트만 출력`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514', max_tokens: 400,
+      model: 'claude-sonnet-5', max_tokens: 400,
       messages: [{ role: 'user', content: csPrompt }]
     });
 
-    const reply = response?.content?.[0]?.text?.trim();
+    const reply = extractText(response);
     if (!reply) return res.status(502).json({ error: 'AI 응답이 비어있습니다.' });
     return res.json({ reply });
   } catch(err) {

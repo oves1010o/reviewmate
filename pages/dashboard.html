@@ -233,14 +233,11 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
     <a class="nav-item" onclick="showScreen('cs')">
       <span class="icon">💬</span> CS 도우미
     </a>
-    <a class="nav-item" onclick="showScreen('subscription')">
-      <span class="icon">💳</span> 구독 관리
-    </a>
   </nav>
   <div class="sidebar-bottom">
-    <div class="usage-label">이번 달 답변 사용량</div>
-    <div class="usage-bar-bg"><div class="usage-bar-fill" id="usageBar" style="width:0%"></div></div>
-    <div class="usage-count" id="usageCount">— / — 개</div>
+    <div class="usage-label">보유 토큰</div>
+    <div class="usage-count" id="usageCount" style="font-size:1.3rem;font-weight:800;margin-bottom:.6rem">— 개</div>
+    <a href="charge.html" class="btn-sm btn-green" style="width:100%;text-align:center;display:block;text-decoration:none;box-sizing:border-box">⚡ 토큰 충전</a>
   </div>
 </aside>
 
@@ -487,6 +484,7 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
 <script>
 const API = '/api';
 let userConfig = {};
+let userTokens = 0;
 let reviews = [];
 let selectedTone = 'warm';
 let statToday = 0;
@@ -505,16 +503,9 @@ async function loadUserData() {
     userConfig = data;
 
     document.getElementById('sidebarStoreName').textContent = data.storeName || '매장명 미설정';
-    document.getElementById('sidebarPlan').textContent = (data.plan || 'basic').toUpperCase();
-    document.getElementById('subPlanName').textContent = {basic:'베이직',pro:'프로',business:'비즈니스'}[data.plan] || '베이직';
-    document.getElementById('subPlanBadge').textContent = (data.plan || 'basic').toUpperCase();
-
-    const used = data.usedThisMonth || 0;
-    const limit = {basic:50,pro:200,business:999999}[data.plan] || 50;
-    document.getElementById('usageBar').style.width = Math.min((used/limit)*100, 100) + '%';
-    document.getElementById('usageCount').textContent = `${used} / ${limit === 999999 ? '무제한' : limit + '개'}`;
-    document.getElementById('subUsage').textContent = used;
-    document.getElementById('subLimit').textContent = limit === 999999 ? '무제한' : limit;
+    document.getElementById('sidebarPlan').textContent = `토큰 ${data.tokens || 0}개`;
+    userTokens = data.tokens || 0;
+    document.getElementById('usageCount').textContent = `${userTokens}개`;
 
     if (data.naverId) {
       document.getElementById('connectBanner').style.display = 'none';
@@ -589,9 +580,22 @@ async function generateOne(i) {
       body: JSON.stringify({ reviewText: reviews[i].text, storeConfig: userConfig })
     });
     const data = await res.json();
+    if (res.status === 402 || data.code === 'NO_TOKENS') {
+      if (confirm('토큰이 부족합니다. 결제 후 이용해주세요.\n충전 페이지로 이동할까요?')) {
+        window.location.href = 'charge.html';
+      }
+      card.classList.remove('replying');
+      if (btn) { btn.innerHTML = '🤖 AI 답변 생성'; btn.disabled = false; }
+      return;
+    }
     if (!res.ok) throw new Error(data.error || '생성 실패');
     const reply = data.reply || data.text || '';
     if (!reply) throw new Error('AI 응답이 비어있습니다');
+    if (typeof data.tokensLeft === 'number') {
+      userTokens = data.tokensLeft;
+      document.getElementById('usageCount').textContent = `${userTokens}개`;
+      document.getElementById('sidebarPlan').textContent = `토큰 ${userTokens}개`;
+    }
     document.getElementById(`replyText-${i}`).value = reply;
     document.getElementById(`reply-${i}`).classList.add('visible');
     document.getElementById(`postBtn-${i}`).style.display = 'inline-flex';
@@ -703,8 +707,20 @@ function handleEvent(ev) {
     document.getElementById('progLabel').textContent = `${ev.current} / ${ev.total}`;
     log(`[${ev.current}/${ev.total}] 처리중...`, 'info');
   } else if(ev.type==='replied') {
-    if(ev.success) { statToday++; document.getElementById('statToday').textContent = statToday; log('✓ 등록 완료'); }
+    if(ev.success) {
+      statToday++; document.getElementById('statToday').textContent = statToday; log('✓ 등록 완료');
+      if (typeof ev.tokensLeft === 'number') {
+        userTokens = ev.tokensLeft;
+        document.getElementById('usageCount').textContent = `${userTokens}개`;
+        document.getElementById('sidebarPlan').textContent = `토큰 ${userTokens}개`;
+      }
+    }
     else log('✗ 실패: '+ev.error, 'err');
+  } else if(ev.type==='error') {
+    log('⚠️ ' + ev.message, 'err');
+    if (ev.message && ev.message.includes('토큰')) {
+      if (confirm(ev.message + '\n충전 페이지로 이동할까요?')) window.location.href = 'charge.html';
+    }
   } else if(ev.type==='done') {
     log(`🎉 완료! 성공 ${ev.success}개, 실패 ${ev.failed}개`);
     loadReviews();
