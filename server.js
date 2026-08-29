@@ -329,17 +329,25 @@ app.post('/api/charge/requests/:requestId/cancel', requireAuth, async (req, res)
   res.json({ success: true });
 });
 
-// ── 관리자(사장님)용 입금 승인 API ──────────────────────────────────────────
-const ADMIN_EMAILS = ['oves1010o@gmail.com'];
+// ── 관리자(사장님)용 입금 승인 API — 로그인 계정과 무관하게 비밀번호로만 잠금 ──
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'reviewmate-admin-2026';
+
+app.post('/api/admin/login', (req, res) => {
+  if ((req.body.password || '') !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: '비밀번호가 올바르지 않습니다.' });
+  }
+  req.session.isAdmin = true;
+  res.json({ success: true });
+});
 
 function requireAdmin(req, res, next) {
-  if (!ADMIN_EMAILS.includes(req.user.email)) {
+  if (!req.session.isAdmin) {
     return res.status(403).json({ error: '관리자만 접근할 수 있습니다.' });
   }
   next();
 }
 
-app.get('/api/admin/charge-requests', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/charge-requests', requireAdmin, (req, res) => {
   const all = [];
   for (const [, u] of db.users) {
     for (const r of (u.chargeRequests || [])) {
@@ -350,7 +358,7 @@ app.get('/api/admin/charge-requests', requireAuth, requireAdmin, (req, res) => {
   res.json({ requests: all });
 });
 
-app.post('/api/admin/charge-requests/:userId/:requestId/approve', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/charge-requests/:userId/:requestId/approve', requireAdmin, async (req, res) => {
   const targetUser = db.users.get(req.params.userId);
   if (!targetUser) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
   const request = (targetUser.chargeRequests || []).find(r => r.id === req.params.requestId);
@@ -365,7 +373,7 @@ app.post('/api/admin/charge-requests/:userId/:requestId/approve', requireAuth, r
   res.json({ success: true, tokens: targetUser.tokens });
 });
 
-app.post('/api/admin/charge-requests/:userId/:requestId/reject', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/charge-requests/:userId/:requestId/reject', requireAdmin, async (req, res) => {
   const targetUser = db.users.get(req.params.userId);
   if (!targetUser) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
   const request = (targetUser.chargeRequests || []).find(r => r.id === req.params.requestId);
