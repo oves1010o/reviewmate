@@ -29,6 +29,7 @@ h1{font-family:'Noto Serif KR',serif;font-size:1.4rem;margin-bottom:1.6rem;}
 .badge{font-size:.72rem;font-weight:700;padding:4px 12px;border-radius:20px;}
 .badge-pending{background:var(--yellow);color:var(--yellow-ink);}
 .badge-waiting_deposit{background:var(--yellow);color:var(--yellow-ink);}
+.badge-cancelled{background:#eee;color:var(--muted);}
 .badge-approved{background:var(--green-light);color:var(--green-dark);}
 .badge-rejected{background:var(--red-bg);color:var(--red);}
 .empty{text-align:center;color:var(--muted);padding:3rem 0;}
@@ -53,7 +54,7 @@ h1{font-family:'Noto Serif KR',serif;font-size:1.4rem;margin-bottom:1.6rem;}
 <script>
 let allRequests = [];
 let filter = 'pending';
-const statusLabel = { waiting_deposit: '입금대기(자동)', pending: '대기중(수동)', approved: '충전완료', rejected: '거절됨' };
+const statusLabel = { pending: '대기중', waiting_deposit: '대기중', approved: '승인됨', rejected: '거절됨', cancelled: '취소됨' };
 const OPEN_STATUSES = ['pending', 'waiting_deposit'];
 
 function setFilter(f) {
@@ -79,7 +80,6 @@ function render() {
           ${r.storeName || '(매장명 없음)'} · ${r.email}<br>
           ${r.depositorName ? `입금자명: <b>${r.depositorName}</b> · ` : ''}신청일: ${new Date(r.requestedAt).toLocaleString('ko-KR')}<br>
           ${r.baseAmount != null ? `토큰 금액 ${r.baseAmount.toLocaleString()}원 + 부가세 ${r.vat.toLocaleString()}원` : ''}
-          ${r.status === 'waiting_deposit' ? '<br><span style="color:var(--yellow-ink)">⚡ 입금되면 자동으로 충전됩니다 (승인 버튼은 웹훅이 실패했을 때만 수동으로 사용)</span>' : ''}
         </div>
       </div>
       ${OPEN_STATUSES.includes(r.status)
@@ -87,7 +87,7 @@ function render() {
              <button class="btn btn-approve" onclick="act('${r.userId}','${r.id}','approve')">✓ 승인</button>
              <button class="btn btn-reject" onclick="act('${r.userId}','${r.id}','reject')">✕ 거절</button>
            </div>`
-        : `<span class="badge badge-${r.status}">${statusLabel[r.status]}</span>`
+        : `<span class="badge badge-${r.status}">${statusLabel[r.status] || r.status}</span>`
       }
     </div>
   `).join('');

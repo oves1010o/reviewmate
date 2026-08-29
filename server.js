@@ -317,6 +317,18 @@ app.get('/api/charge/requests', requireAuth, (req, res) => {
   res.json({ requests: req.user.chargeRequests || [] });
 });
 
+app.post('/api/charge/requests/:requestId/cancel', requireAuth, async (req, res) => {
+  const request = (req.user.chargeRequests || []).find(r => r.id === req.params.requestId);
+  if (!request) return res.status(404).json({ error: '요청을 찾을 수 없습니다.' });
+  if (!['pending', 'waiting_deposit'].includes(request.status)) {
+    return res.status(400).json({ error: '이미 처리된 요청은 취소할 수 없습니다.' });
+  }
+  request.status = 'cancelled';
+  db.users.set(req.user.userId, req.user);
+  await saveDB();
+  res.json({ success: true });
+});
+
 // ── 관리자(사장님)용 입금 승인 API ──────────────────────────────────────────
 const ADMIN_EMAILS = ['oves1010o@gmail.com'];
 
