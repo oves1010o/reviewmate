@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>토큰 충전 — 리뷰메이트</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://js.tosspayments.com/v1/payment-widget"></script>
+<script src="https://js.tosspayments.com/v1"></script>
 <style>
 :root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -94,8 +94,7 @@ nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;
         <span>충전 금액</span>
         <b id="orderAmount">0원</b>
       </div>
-      <div id="payment-widget"></div>
-      <div id="agreement-widget"></div>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:1.4rem;line-height:1.6">결제하기 버튼을 누르면 토스페이먼츠 카드 결제 페이지로 이동합니다.</p>
       <button class="btn-pay" id="payBtn" onclick="handlePay()" disabled>토큰 선택 후 결제하기</button>
       <p class="pay-note">토스페이먼츠 안전 결제 · 결제 즉시 토큰이 지급됩니다</p>
     </div>
@@ -103,18 +102,14 @@ nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;
 </div>
 
 <script>
-let paymentWidget;
+const tossPayments = TossPayments('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN');
 let selectedTokens = 0;
-let widgetReady = false;
 const TOKEN_PRICE = 100;
 
 function updatePayBtnState() {
   const btn = document.getElementById('payBtn');
   const amount = selectedTokens * TOKEN_PRICE;
-  if (!widgetReady) {
-    btn.disabled = true;
-    btn.textContent = '결제 위젯 불러오는 중...';
-  } else if (selectedTokens < 1) {
+  if (selectedTokens < 1) {
     btn.disabled = true;
     btn.textContent = '토큰 선택 후 결제하기';
   } else {
@@ -132,7 +127,7 @@ async function loadBalance() {
   } catch(e) { window.location.href = 'login.html'; }
 }
 
-async function selectPkg(tokens, fromCustom) {
+function selectPkg(tokens, fromCustom) {
   selectedTokens = tokens || 0;
   document.querySelectorAll('.pkg-btn').forEach(b => {
     b.classList.toggle('selected', !fromCustom && parseInt(b.dataset.tokens) === selectedTokens);
@@ -141,30 +136,16 @@ async function selectPkg(tokens, fromCustom) {
   const amount = selectedTokens * TOKEN_PRICE;
   document.getElementById('orderAmount').textContent = amount.toLocaleString() + '원';
   updatePayBtnState();
-  if (widgetReady && amount > 0) {
-    try { await paymentWidget.updateAmount(amount); } catch(e) {}
-  }
 }
 
-(async () => {
-  await loadBalance();
-  try {
-    paymentWidget = PaymentWidget('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN', PaymentWidget.ANONYMOUS);
-    await paymentWidget.renderPaymentMethods('#payment-widget', { value: 0 });
-    await paymentWidget.renderAgreement('#agreement-widget');
-    widgetReady = true;
-  } catch(e) {
-    document.getElementById('payment-widget').innerHTML =
-      '<div style="padding:1.2rem;background:var(--bg);border-radius:10px;text-align:center;font-size:.85rem;color:var(--muted)">결제 위젯을 불러오지 못했습니다</div>';
-  }
-  updatePayBtnState();
-})();
+loadBalance();
+updatePayBtnState();
 
 async function handlePay() {
-  if (selectedTokens < 1 || !widgetReady) return;
+  if (selectedTokens < 1) return;
   const btn = document.getElementById('payBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> 처리중...';
+  btn.innerHTML = '<span class="spinner"></span> 이동중...';
   try {
     const prepRes = await fetch('/api/charge/prepare', {
       method: 'POST', credentials: 'include',
@@ -174,10 +155,8 @@ async function handlePay() {
     const order = await prepRes.json();
     if (!prepRes.ok) throw new Error(order.error || '주문 생성 실패');
 
-    sessionStorage.setItem('pendingCharge', JSON.stringify(order));
-
-    await paymentWidget.updateAmount(order.amount);
-    await paymentWidget.requestPayment({
+    await tossPayments.requestPayment('카드', {
+      amount: order.amount,
       orderId: order.orderId,
       orderName: order.orderName,
       successUrl: `${location.origin}/charge-success.html`,
