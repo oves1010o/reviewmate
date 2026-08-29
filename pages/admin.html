@@ -28,6 +28,7 @@ h1{font-family:'Noto Serif KR',serif;font-size:1.4rem;margin-bottom:1.6rem;}
 .btn-reject:hover{background:var(--red-bg);}
 .badge{font-size:.72rem;font-weight:700;padding:4px 12px;border-radius:20px;}
 .badge-pending{background:var(--yellow);color:var(--yellow-ink);}
+.badge-waiting_deposit{background:var(--yellow);color:var(--yellow-ink);}
 .badge-approved{background:var(--green-light);color:var(--green-dark);}
 .badge-rejected{background:var(--red-bg);color:var(--red);}
 .empty{text-align:center;color:var(--muted);padding:3rem 0;}
@@ -52,7 +53,8 @@ h1{font-family:'Noto Serif KR',serif;font-size:1.4rem;margin-bottom:1.6rem;}
 <script>
 let allRequests = [];
 let filter = 'pending';
-const statusLabel = { pending: '대기중', approved: '승인됨', rejected: '거절됨' };
+const statusLabel = { waiting_deposit: '입금대기(자동)', pending: '대기중(수동)', approved: '충전완료', rejected: '거절됨' };
+const OPEN_STATUSES = ['pending', 'waiting_deposit'];
 
 function setFilter(f) {
   filter = f;
@@ -62,7 +64,9 @@ function setFilter(f) {
 
 function render() {
   const list = document.getElementById('list');
-  const filtered = filter === 'all' ? allRequests : allRequests.filter(r => r.status === filter);
+  const filtered = filter === 'all' ? allRequests
+    : filter === 'pending' ? allRequests.filter(r => OPEN_STATUSES.includes(r.status))
+    : allRequests.filter(r => r.status === filter);
   if (!filtered.length) {
     list.innerHTML = '<div class="empty">해당 상태의 요청이 없습니다</div>';
     return;
@@ -73,11 +77,12 @@ function render() {
         <b>${r.tokens}개 · ${r.amount.toLocaleString()}원</b>
         <div class="meta">
           ${r.storeName || '(매장명 없음)'} · ${r.email}<br>
-          입금자명: <b>${r.depositorName}</b> · 신청일: ${new Date(r.requestedAt).toLocaleString('ko-KR')}<br>
+          ${r.depositorName ? `입금자명: <b>${r.depositorName}</b> · ` : ''}신청일: ${new Date(r.requestedAt).toLocaleString('ko-KR')}<br>
           ${r.baseAmount != null ? `토큰 금액 ${r.baseAmount.toLocaleString()}원 + 부가세 ${r.vat.toLocaleString()}원` : ''}
+          ${r.status === 'waiting_deposit' ? '<br><span style="color:var(--yellow-ink)">⚡ 입금되면 자동으로 충전됩니다 (승인 버튼은 웹훅이 실패했을 때만 수동으로 사용)</span>' : ''}
         </div>
       </div>
-      ${r.status === 'pending'
+      ${OPEN_STATUSES.includes(r.status)
         ? `<div class="card-actions">
              <button class="btn btn-approve" onclick="act('${r.userId}','${r.id}','approve')">✓ 승인</button>
              <button class="btn btn-reject" onclick="act('${r.userId}','${r.id}','reject')">✕ 거절</button>

@@ -3,17 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>충전 처리중 — 리뷰메이트</title>
+<title>가상계좌 발급 완료 — 리뷰메이트</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;}
+:root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;--yellow:#fff8e1;--yellow-ink:#a06a00;}
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;}
-.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:3rem 2.5rem;text-align:center;max-width:400px;width:100%;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:2.6rem 2.2rem;text-align:center;max-width:420px;width:100%;}
 .icon{font-size:3rem;margin-bottom:1rem;}
-.title{font-family:'Noto Serif KR',serif;font-size:1.3rem;font-weight:700;margin-bottom:.6rem;}
-.desc{font-size:.88rem;color:var(--muted);line-height:1.6;margin-bottom:1.6rem;}
-.btn{display:inline-block;padding:12px 28px;border-radius:10px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;font-size:.9rem;}
+.title{font-family:'Noto Serif KR',serif;font-size:1.25rem;font-weight:700;margin-bottom:.6rem;}
+.desc{font-size:.85rem;color:var(--muted);line-height:1.6;margin-bottom:1.4rem;}
+.account-box{background:var(--yellow);border-radius:14px;padding:1.4rem;margin-bottom:1.4rem;text-align:left;}
+.account-row{display:flex;justify-content:space-between;font-size:.95rem;font-weight:700;margin-bottom:.3rem;}
+.account-copy{font-size:.72rem;font-weight:600;color:var(--green-dark);background:#fff;border:1px solid var(--green);border-radius:6px;padding:3px 9px;cursor:pointer;}
+.account-meta{font-size:.78rem;color:var(--yellow-ink);line-height:1.7;margin-top:.5rem;}
+.btn{display:inline-block;padding:12px 28px;border-radius:10px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;font-size:.9rem;border:none;cursor:pointer;font-family:inherit;}
 .btn:hover{background:var(--green-dark);}
 .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 1.2rem;}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -22,50 +26,61 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink)
 <body>
 <div class="card" id="card">
   <div class="spinner"></div>
-  <div class="title">결제 확인 중입니다...</div>
-  <div class="desc">잠시만 기다려주세요.</div>
+  <div class="title">가상계좌 정보를 불러오는 중...</div>
 </div>
 
 <script>
 (async () => {
   const params = new URLSearchParams(location.search);
   const paymentKey = params.get('paymentKey');
-  const orderId = params.get('orderId');
-  const amount = params.get('amount');
   const card = document.getElementById('card');
 
-  if (!paymentKey || !orderId || !amount) {
+  if (!paymentKey) {
     card.innerHTML = `
       <div class="icon">⚠️</div>
       <div class="title">결제 정보를 확인할 수 없습니다</div>
-      <div class="desc">결제 정보가 누락되었습니다. 대시보드로 돌아가 다시 시도해주세요.</div>
+      <div class="desc">대시보드로 돌아가 다시 시도해주세요.</div>
       <a class="btn" href="dashboard.html">대시보드로 돌아가기</a>`;
     return;
   }
 
   try {
-    const res = await fetch('/api/charge/confirm', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentKey, orderId, amount: parseInt(amount) })
-    });
+    const res = await fetch(`/api/charge/payment-info/${paymentKey}`, { credentials: 'include' });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '충전 승인 실패');
+    if (!res.ok) throw new Error(data.error || '조회 실패');
 
-    sessionStorage.removeItem('pendingCharge');
+    const va = data.virtualAccount;
+    if (!va) throw new Error('가상계좌 정보가 없습니다.');
+
+    const due = new Date(va.dueDate);
     card.innerHTML = `
-      <div class="icon">🎉</div>
-      <div class="title">토큰 충전 완료!</div>
-      <div class="desc">토큰 ${data.added}개가 지급되었습니다.<br>현재 보유 토큰: <b>${data.tokens}개</b></div>
-      <a class="btn" href="dashboard.html">대시보드로 돌아가기</a>`;
+      <div class="icon">🏦</div>
+      <div class="title">가상계좌가 발급되었습니다</div>
+      <div class="desc">아래 계좌로 입금하시면 <b>자동으로</b> 토큰이 충전됩니다.<br>사장님이 따로 승인할 필요가 없어요.</div>
+      <div class="account-box">
+        <div class="account-row">
+          <span id="vaText">${va.bank} ${va.accountNumber}</span>
+          <button class="account-copy" onclick="copyAcc('${va.accountNumber}')">복사</button>
+        </div>
+        <div style="font-size:.8rem;color:var(--yellow-ink)">예금주: ${va.customerName || '리뷰메이트'}</div>
+        <div class="account-meta">
+          입금 금액: <b>${data.totalAmount.toLocaleString()}원</b> (정확히 일치해야 자동 확인됩니다)<br>
+          입금 기한: ${due.toLocaleString('ko-KR')}
+        </div>
+      </div>
+      <a class="btn" href="charge.html">충전 페이지로 돌아가기</a>`;
   } catch (e) {
     card.innerHTML = `
       <div class="icon">❌</div>
-      <div class="title">충전 승인 중 오류가 발생했습니다</div>
-      <div class="desc">${e.message}<br>결제가 되었는데도 이 화면이 보인다면 고객센터로 문의해주세요.</div>
-      <a class="btn" href="dashboard.html">대시보드로 돌아가기</a>`;
+      <div class="title">가상계좌 정보를 불러오지 못했습니다</div>
+      <div class="desc">${e.message}</div>
+      <a class="btn" href="charge.html">충전 페이지로 돌아가기</a>`;
   }
 })();
+
+function copyAcc(num) {
+  navigator.clipboard.writeText(num.replace(/-/g, ''));
+}
 </script>
 </body>
 </html>

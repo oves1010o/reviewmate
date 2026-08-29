@@ -184,47 +184,93 @@ app.put('/api/user/config', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// 토큰 충전 API (토스페이먼츠 일반결제, 1회성)
+// 토큰 충전 API (토스페이먼츠 가상계좌 - 입금 자동 확인)
 // ══════════════════════════════════════════════════════════════════════════
 
-app.post('/api/charge/prepare', requireAuth, (req, res) => {
+// 배포된 서버의 공개 URL (토스가 웹훅을 보낼 주소). Render 환경변수 PUBLIC_URL로 덮어쓸 수 있음
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://reviewmate-kdyl.onrender.com';
+
+app.post('/api/charge/prepare', requireAuth, async (req, res) => {
   const tokens = parseInt(req.body.tokens);
   if (!tokens || tokens < 1) return res.status(400).json({ error: '충전할 토큰 개수를 입력해주세요.' });
-  const amount = tokens * TOKEN_PRICE_KRW;
+
+  const baseAmount = tokens * TOKEN_PRICE_KRW;
+  const vat = Math.round(baseAmount * 0.1);
+  const amount = baseAmount + vat;
+  const orderId = `charge_${req.user.userId}_${Date.now()}`;
+
+  const request = {
+    id: generateId(), orderId, tokens, baseAmount, vat, amount,
+    status: 'waiting_deposit', requestedAt: new Date().toISOString()
+  };
+  req.user.chargeRequests = req.user.chargeRequests || [];
+  req.user.chargeRequests.unshift(request);
+  db.users.set(req.user.userId, req.user);
+  await saveDB();
+
   res.json({
     clientKey: process.env.TOSS_CLIENT_KEY || 'test_ck_여기에입력',
-    customerKey: req.user.userId,
-    orderId: `charge_${req.user.userId}_${Date.now()}`,
+    orderId,
     orderName: `리뷰메이트 토큰 ${tokens}개`,
     amount,
-    tokens
+    tokens,
+    virtualAccountCallbackUrl: `${PUBLIC_URL}/api/webhooks/toss`
   });
 });
 
-app.post('/api/charge/confirm', requireAuth, async (req, res) => {
-  const { paymentKey, orderId, amount } = req.body;
-  if (!paymentKey || !orderId || !amount) return res.status(400).json({ error: '결제 정보가 올바르지 않습니다.' });
+// 토스 가상계좌 결제 상세 조회 (충전완료 화면에서 계좌번호 표시용)
+app.get('/api/charge/payment-info/:paymentKey', requireAuth, async (req, res) => {
   try {
-    const tossRes = await fetch('https://api.tosspayments.com/v1/payments/confirm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${Buffer.from(process.env.TOSS_SECRET_KEY + ':').toString('base64')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ paymentKey, orderId, amount })
+    const r = await fetch(`https://api.tosspayments.com/v1/payments/${req.params.paymentKey}`, {
+      headers: { 'Authorization': `Basic ${Buffer.from(process.env.TOSS_SECRET_KEY + ':').toString('base64')}` }
     });
-    const tossData = await tossRes.json();
-    if (!tossRes.ok) throw new Error(tossData.message || '결제 승인 실패');
-
-    // 토스가 실제로 승인한 금액 기준으로 토큰 지급 (클라이언트 값은 신뢰하지 않음)
-    const paidAmount = tossData.totalAmount;
-    const tokensToAdd = Math.floor(paidAmount / TOKEN_PRICE_KRW);
-    req.user.tokens = (req.user.tokens || 0) + tokensToAdd;
-    db.users.set(req.user.userId, req.user);
-    await saveDB();
-    res.json({ success: true, added: tokensToAdd, tokens: req.user.tokens });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || '조회 실패');
+    res.json({
+      status: data.status,
+      orderId: data.orderId,
+      totalAmount: data.totalAmount,
+      virtualAccount: data.virtualAccount || null
+    });
   } catch(err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// 토스 웹훅 - 가상계좌에 실제 입금이 확인되면 토스가 이 URL로 알려줌
+app.post('/api/webhooks/toss', async (req, res) => {
+  try {
+    const { eventType, data } = req.body || {};
+    const orderId = data?.orderId;
+    const paymentKey = data?.paymentKey;
+    console.log('[토스 웹훅]', eventType, orderId);
+    if (!orderId || !paymentKey) return res.status(200).json({ received: true });
+
+    // 웹훅 본문을 그대로 믿지 않고, 토스 서버에 직접 재조회해서 검증
+    const verifyRes = await fetch(`https://api.tosspayments.com/v1/payments/${paymentKey}`, {
+      headers: { 'Authorization': `Basic ${Buffer.from(process.env.TOSS_SECRET_KEY + ':').toString('base64')}` }
+    });
+    const payment = await verifyRes.json();
+    if (!verifyRes.ok || payment.orderId !== orderId || payment.status !== 'DONE') {
+      return res.status(200).json({ received: true }); // 아직 입금 전이거나 무관한 이벤트
+    }
+
+    for (const [, u] of db.users) {
+      const request = (u.chargeRequests || []).find(r => r.orderId === orderId);
+      if (request && request.status === 'waiting_deposit') {
+        request.status = 'approved';
+        request.approvedAt = new Date().toISOString();
+        u.tokens = (u.tokens || 0) + request.tokens;
+        db.users.set(u.userId, u);
+        await saveDB();
+        console.log(`✅ 가상계좌 입금 확인 → ${u.email}에게 토큰 ${request.tokens}개 자동 지급`);
+        break;
+      }
+    }
+    res.status(200).json({ received: true });
+  } catch(err) {
+    console.error('[토스 웹훅 오류]', err.message);
+    res.status(200).json({ received: true }); // 토스는 200이 아니면 재시도하므로 항상 200 응답
   }
 });
 
@@ -297,7 +343,7 @@ app.post('/api/admin/charge-requests/:userId/:requestId/approve', requireAuth, r
   if (!targetUser) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
   const request = (targetUser.chargeRequests || []).find(r => r.id === req.params.requestId);
   if (!request) return res.status(404).json({ error: '요청을 찾을 수 없습니다.' });
-  if (request.status !== 'pending') return res.status(400).json({ error: '이미 처리된 요청입니다.' });
+  if (!['pending','waiting_deposit'].includes(request.status)) return res.status(400).json({ error: '이미 처리된 요청입니다.' });
 
   request.status = 'approved';
   request.approvedAt = new Date().toISOString();
@@ -312,7 +358,7 @@ app.post('/api/admin/charge-requests/:userId/:requestId/reject', requireAuth, re
   if (!targetUser) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
   const request = (targetUser.chargeRequests || []).find(r => r.id === req.params.requestId);
   if (!request) return res.status(404).json({ error: '요청을 찾을 수 없습니다.' });
-  if (request.status !== 'pending') return res.status(400).json({ error: '이미 처리된 요청입니다.' });
+  if (!['pending','waiting_deposit'].includes(request.status)) return res.status(400).json({ error: '이미 처리된 요청입니다.' });
 
   request.status = 'rejected';
   db.users.set(targetUser.userId, targetUser);

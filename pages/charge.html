@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>토큰 충전 — 리뷰메이트</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://js.tosspayments.com/v1"></script>
 <style>
 :root{--green:#03C75A;--green-dark:#02a84c;--green-light:#e8fff2;--ink:#111;--ink-light:#444;--muted:#888;--border:#e5e5e0;--bg:#f7f8f5;--card:#fff;--yellow:#fff8e1;--yellow-ink:#a06a00;--red:#e03131;--red-bg:#fff0f0;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -34,14 +35,7 @@ nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 2rem;
 .widget-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;margin-bottom:1.5rem;}
 .order-summary{background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1.2rem;display:flex;justify-content:space-between;font-size:.88rem;}
 .order-summary b{font-size:1.05rem;color:var(--green-dark);}
-.bank-box{background:var(--yellow);border-radius:12px;padding:1.2rem;margin-bottom:1.2rem;}
-.bank-box-label{font-size:.76rem;color:var(--yellow-ink);font-weight:700;margin-bottom:.6rem;}
-.bank-row{display:flex;justify-content:space-between;align-items:center;font-size:.95rem;font-weight:700;margin-bottom:.3rem;}
-.bank-copy{font-size:.72rem;font-weight:600;color:var(--green-dark);background:#fff;border:1px solid var(--green);border-radius:6px;padding:3px 9px;cursor:pointer;}
-.bank-holder{font-size:.8rem;color:var(--muted);}
-label{font-size:.82rem;font-weight:600;color:var(--ink-light);display:block;margin-bottom:6px;}
-input[type=text]{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;font-size:.9rem;font-family:'Noto Sans KR',sans-serif;margin-bottom:1.2rem;}
-input[type=text]:focus{outline:none;border-color:var(--green);}
+.auto-note{background:var(--yellow);border-radius:12px;padding:1rem 1.2rem;margin-bottom:1.4rem;font-size:.8rem;color:var(--yellow-ink);line-height:1.6;}
 .btn-pay{width:100%;padding:15px;border-radius:12px;border:none;background:var(--green);color:#fff;font-size:1rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .2s;}
 .btn-pay:hover{background:var(--green-dark);}
 .btn-pay:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
@@ -50,7 +44,8 @@ input[type=text]:focus{outline:none;border-color:var(--green);}
 .req-item{display:flex;justify-content:space-between;align-items:center;padding:.8rem 0;border-bottom:1px solid var(--border);font-size:.85rem;}
 .req-item:last-child{border-bottom:none;}
 .req-left{color:var(--ink-light);}
-.badge{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:20px;}
+.badge{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;}
+.badge-waiting_deposit{background:var(--yellow);color:var(--yellow-ink);}
 .badge-pending{background:var(--yellow);color:var(--yellow-ink);}
 .badge-approved{background:var(--green-light);color:var(--green-dark);}
 .badge-rejected{background:var(--red-bg);color:var(--red);}
@@ -111,20 +106,10 @@ input[type=text]:focus{outline:none;border-color:var(--green);}
           </div>
         </div>
 
-        <div class="bank-box">
-          <div class="bank-box-label">⚡ 아래 계좌로 입금해주세요</div>
-          <div class="bank-row">
-            <span id="bankText">토스뱅크 1000-0550-0556</span>
-            <button class="bank-copy" onclick="copyAccount()">복사</button>
-          </div>
-          <div class="bank-holder">예금주: 김동욱</div>
-        </div>
+        <div class="auto-note">⚡ 버튼을 누르면 <b>본인 전용 가상계좌</b>가 자동 발급돼요. 안내된 계좌로 입금하면 <b>사람 확인 없이 자동으로</b> 토큰이 즉시 충전됩니다.</div>
 
-        <label>입금자명</label>
-        <input type="text" id="depositorName" placeholder="실제 입금하실 분 성함을 입력해주세요">
-
-        <button class="btn-pay" id="payBtn" onclick="submitRequest()" disabled>토큰 선택 후 입금 신청하기</button>
-        <p class="pay-note">입금 확인 후 사장님이 승인하면 토큰이 지급됩니다 (영업일 기준 확인 후 처리)</p>
+        <button class="btn-pay" id="payBtn" onclick="handlePay()" disabled>토큰 선택 후 가상계좌 발급받기</button>
+        <p class="pay-note">토스페이먼츠 안전 결제 · 입금 확인 즉시 자동 충전</p>
       </div>
 
       <div class="widget-wrap">
@@ -136,9 +121,9 @@ input[type=text]:focus{outline:none;border-color:var(--green);}
 </div>
 
 <script>
+const tossPayments = TossPayments('test_ck_jExPeJWYVQ1X7oq066DqV49R5gvN');
 let selectedTokens = 0;
 const TOKEN_PRICE = 100;
-let bankInfo = { bank: '토스뱅크', account: '1000-0550-0556', holder: '김동욱' };
 
 function calcAmounts(tokens) {
   const base = tokens * TOKEN_PRICE;
@@ -150,7 +135,7 @@ function updatePayBtnState() {
   const btn = document.getElementById('payBtn');
   const { total } = calcAmounts(selectedTokens);
   btn.disabled = selectedTokens < 1;
-  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 입금 신청하기' : `${selectedTokens}개 (${total.toLocaleString()}원) 입금 신청하기`;
+  btn.textContent = selectedTokens < 1 ? '토큰 선택 후 가상계좌 발급받기' : `${selectedTokens}개 (${total.toLocaleString()}원) 가상계좌 발급받기`;
 }
 
 async function loadBalance() {
@@ -160,24 +145,6 @@ async function loadBalance() {
     const data = await res.json();
     document.getElementById('currentBalance').textContent = `${data.tokens || 0}개`;
   } catch(e) { window.location.href = 'login.html'; }
-}
-
-async function loadBankInfo() {
-  try {
-    const res = await fetch('/api/charge/bank-info', { credentials: 'include' });
-    if (!res.ok) return;
-    bankInfo = await res.json();
-    document.getElementById('bankText').textContent = `${bankInfo.bank} ${bankInfo.account}`;
-    document.querySelector('.bank-holder').textContent = `예금주: ${bankInfo.holder}`;
-  } catch(e) {}
-}
-
-function copyAccount() {
-  navigator.clipboard.writeText(bankInfo.account.replace(/-/g, ''));
-  const btn = document.querySelector('.bank-copy');
-  const orig = btn.textContent;
-  btn.textContent = '복사됨!';
-  setTimeout(() => btn.textContent = orig, 1200);
 }
 
 function selectPkg(tokens, fromCustom) {
@@ -193,7 +160,7 @@ function selectPkg(tokens, fromCustom) {
   updatePayBtnState();
 }
 
-const statusLabel = { pending: '대기중', approved: '승인됨', rejected: '거절됨' };
+const statusLabel = { waiting_deposit: '입금대기(자동)', pending: '대기중', approved: '충전완료', rejected: '거절됨' };
 
 async function loadRequests() {
   try {
@@ -209,7 +176,7 @@ async function loadRequests() {
       <div class="req-item">
         <div class="req-left">
           <div>${r.tokens}개 · ${r.amount.toLocaleString()}원 <span style="color:var(--muted);font-weight:400">(부가세 포함)</span></div>
-          <div style="font-size:.72rem;color:var(--muted);margin-top:2px">${new Date(r.requestedAt).toLocaleString('ko-KR')} · 입금자: ${r.depositorName}</div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:2px">${new Date(r.requestedAt).toLocaleString('ko-KR')}</div>
         </div>
         <span class="badge badge-${r.status}">${statusLabel[r.status] || r.status}</span>
       </div>
@@ -217,42 +184,40 @@ async function loadRequests() {
   } catch(e) {}
 }
 
-async function submitRequest() {
+async function handlePay() {
   if (selectedTokens < 1) return;
-  const depositorName = document.getElementById('depositorName').value.trim();
-  if (!depositorName) { alert('입금자명을 입력해주세요.'); return; }
-
   const btn = document.getElementById('payBtn');
   btn.disabled = true;
-  btn.textContent = '신청 중...';
+  btn.innerHTML = '<span class="spinner"></span> 이동중...';
   try {
-    const res = await fetch('/api/charge/request', {
+    const prepRes = await fetch('/api/charge/prepare', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tokens: selectedTokens, depositorName })
+      body: JSON.stringify({ tokens: selectedTokens })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '신청 실패');
+    const order = await prepRes.json();
+    if (!prepRes.ok) throw new Error(order.error || '주문 생성 실패');
 
-    alert(`입금 신청이 접수되었습니다!\n\n${bankInfo.bank} ${bankInfo.account} (${bankInfo.holder})\n으로 ${data.request.amount.toLocaleString()}원을 입금해주세요.\n\n입금 확인 후 토큰이 지급됩니다.`);
-    document.getElementById('depositorName').value = '';
-    selectedTokens = 0;
-    document.querySelectorAll('.pkg-btn').forEach(b => b.classList.remove('selected'));
-    document.getElementById('baseAmount').textContent = '0원';
-    document.getElementById('vatAmount').textContent = '0원';
-    document.getElementById('orderAmount').textContent = '0원';
-    loadRequests();
+    await tossPayments.requestPayment('가상계좌', {
+      amount: order.amount,
+      orderId: order.orderId,
+      orderName: order.orderName,
+      customerName: '사장님',
+      validHours: 24,
+      virtualAccountCallbackUrl: order.virtualAccountCallbackUrl,
+      successUrl: `${location.origin}/charge-success.html`,
+      failUrl: `${location.origin}/charge-fail.html`
+    });
   } catch(e) {
-    alert('오류: ' + e.message);
-  } finally {
+    alert('가상계좌 발급 요청 중 오류: ' + e.message);
     updatePayBtnState();
   }
 }
 
 loadBalance();
-loadBankInfo();
 loadRequests();
 updatePayBtnState();
+setInterval(() => { loadRequests(); loadBalance(); }, 15000); // 자동 입금확인 결과를 주기적으로 반영
 </script>
 </body>
 </html>
