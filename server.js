@@ -719,13 +719,16 @@ JSON 배열로만 답변: ["키워드1", "키워드2", "키워드3", "키워드4
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5', max_tokens: 200,
+      model: 'claude-sonnet-5', max_tokens: 500,
       messages: [{ role: 'user', content: prompt }]
     });
-    const text = extractText(response);
+    let text = extractText(response);
+    const match = text.match(/\[[\s\S]*\]/); // 혹시 앞뒤에 다른 텍스트가 붙어도 배열 부분만 추출
+    if (match) text = match[0];
     const keywords = JSON.parse(text);
     return Array.isArray(keywords) ? keywords : [];
   } catch(e) {
+    console.error('[SEO 키워드 파싱 실패]', e.message);
     return [];
   }
 }

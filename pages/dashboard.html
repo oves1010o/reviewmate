@@ -769,7 +769,7 @@ async function connectNaver() {
   btn.disabled=true;
   btn.innerHTML="연결 중...";
   try {
-    const res=await fetch("/api/naver-open-login",{method:"POST",body:JSON.stringify({placeId:document.getElementById("placeId")?.value||""}),credentials:"include"});
+    const res=await fetch("/api/naver-open-login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({placeId:document.getElementById("cfgPlaceId")?.value.trim()||""}),credentials:"include"});
     const data=await res.json();
     if(data.success){
       
