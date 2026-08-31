@@ -426,7 +426,8 @@ async function getOrCreateBrowser(sessionId, headless = true) {
   const browser = await puppeteer.launch({
     headless: headless ? 'new' : false,
     args: launchArgs,
-    defaultViewport: null
+    defaultViewport: null,
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' }
   });
 
   const page = await browser.newPage();
@@ -519,7 +520,8 @@ async function createFreshBrowser(sessionId, headless = true) {
   const browser = await puppeteer.launch({
     headless: headless ? 'new' : false,
     args: launchArgs,
-    defaultViewport: null
+    defaultViewport: null,
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' }
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1024, height: 700 });

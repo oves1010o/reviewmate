@@ -16,5 +16,6 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --only=production
 COPY . .
+RUN chmod +x start.sh
 
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1280x1024x24 -ac +render -noreset & sleep 5 && node server.js"]
+CMD ["./start.sh"]
