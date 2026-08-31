@@ -642,6 +642,179 @@ async function analyzeOwnerStyle(page, placeId) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// 스마트스토어(쇼핑몰) 리뷰 자동화 — 스마트플레이스와는 별개의 네이버 로그인
+// ══════════════════════════════════════════════════════════════════════════
+
+function smartStoreSessionId(sessionId) { return `${sessionId}:smartstore`; }
+
+// ── 팝업창 로그인 (스마트플레이스용 naverLoginWithPopup과 동일한 방식, URL만 다름) ──
+async function smartStoreLoginWithPopup(sessionId) {
+  const ssId = smartStoreSessionId(sessionId);
+
+  const visible = await createFreshBrowser(`${ssId}_visible`, false);
+  const { browser: visibleBrowser, page: p2 } = visible;
+  await p2.goto('https://accounts.commerce.naver.com/login', {
+    waitUntil: 'domcontentloaded', timeout: 30000
+  });
+  try { await p2.bringToFront(); } catch (e) {}
+
+  const cookies = await waitForNaverLogin(p2);
+  console.log('✅ 네이버(스마트스토어) 로그인 감지! 쿠키 추출 완료');
+
+  const headless = await createFreshBrowser(ssId, true);
+  const { page: headlessPage } = headless;
+  await applyCookiesToPage(headlessPage, cookies);
+
+  await headlessPage.goto('https://naver.com', { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const copiedCookies = await headlessPage.cookies('https://naver.com');
+  const copiedLoggedIn = copiedCookies.some(c => c.name === 'NID_AUT' || c.name === 'NID_SES');
+  if (!copiedLoggedIn) throw new Error('headless 세션 로그인 검증 실패');
+
+  headless.cookies = copiedCookies;
+  headless.loggedIn = true;
+
+  await headlessPage.goto('https://sell.smartstore.naver.com/#/review/search', {
+    waitUntil: 'domcontentloaded', timeout: 30000
+  });
+  console.log('✅ 스마트스토어 리뷰관리 이동 완료!');
+
+  await visibleBrowser.close().catch(() => {});
+  return { success: true };
+}
+
+// ── 화면에 보이는 리뷰 목록 읽기 (AG-Grid 표 구조) ──────────────────────────
+// 선택자는 판매자센터 리뷰관리 화면의 실제 구조에 맞춘 것으로, 네이버가 화면
+// 구조를 바꾸면 조정이 필요할 수 있습니다.
+async function syncSmartStoreReviews(page) {
+  await page.goto('https://sell.smartstore.naver.com/#/review/search', {
+    waitUntil: 'networkidle2', timeout: 30000
+  });
+  await delay(3000);
+
+  const rows = await page.evaluate(() => {
+    const rowEls = document.querySelectorAll(".ag-center-cols-container [role='row'][row-id]");
+    return [...rowEls].map((row) => {
+      const cells = [...row.querySelectorAll('[col-id]')];
+      const byId = Object.fromEntries(cells.map(c => [c.getAttribute('col-id'), c.innerText.trim()]));
+      const reviewId = row.querySelector('[col-id="reviewContent"] a')
+        ?.getAttribute('ng-click')?.match(/openReviewDetailModal\((\d+)/)?.[1] || '';
+      return {
+        reviewId,
+        productNo: byId.productNo || '',
+        productName: byId.productName || '',
+        reviewScore: byId.reviewScore || '',
+        reviewContent: byId.reviewContent || '',
+        writerId: byId.writerId || '',
+        createDate: byId.createDate || ''
+      };
+    });
+  });
+
+  return rows.filter(r => r.productName && r.reviewContent);
+}
+
+// ── 승인된 답글을 실제 리뷰 상세창에 입력 ───────────────────────────────────
+// ⚠️ 이 부분은 네이버 판매자센터 화면 구조에 가장 민감한 부분이라, 실제 계정으로
+// 테스트하면서 선택자 조정이 필요할 가능성이 높습니다.
+async function postSmartStoreReply(page, reviewId, replyText) {
+  const opened = await page.evaluate((id) => {
+    if (typeof window.openReviewDetailModal === 'function') {
+      window.openReviewDetailModal(Number(id));
+      return true;
+    }
+    return false;
+  }, reviewId);
+  if (!opened) throw new Error('리뷰 상세창을 여는 함수를 찾지 못했습니다. (openReviewDetailModal 없음)');
+  await delay(1500);
+
+  await page.waitForSelector('textarea', { visible: true, timeout: 10000 });
+  const ta = await page.$('textarea');
+  if (!ta) throw new Error('답글 입력창(textarea)을 찾지 못했습니다.');
+
+  await ta.click({ clickCount: 3 });
+  await page.keyboard.press('Backspace');
+  await delay(150);
+  await page.keyboard.type(replyText, { delay: 30 });
+  await delay(500);
+
+  const typedValue = await page.evaluate(() => document.querySelector('textarea')?.value || '');
+  if (!typedValue || typedValue.trim().length < 2) throw new Error('답글 입력에 실패했습니다: ' + typedValue);
+
+  const clicked = await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('button')];
+    const target = btns.find(b => /등록|확인|저장/.test(b.innerText) && !b.disabled);
+    if (target) { target.click(); return true; }
+    return false;
+  });
+  if (!clicked) throw new Error('등록 버튼을 찾지 못했습니다.');
+  await delay(2000);
+  return true;
+}
+
+// ── AI 답변 생성 (실제 Claude 호출 — 답변이 서로 비슷해지지 않도록 리뷰 내용에
+//    구체적으로 반응하고, 상품 셀링포인트가 있으면 자연스럽게 녹이도록 지시) ──
+async function generateSmartStoreReply(user, reviewText, productName, insight) {
+  const prompt = `당신은 네이버 스마트스토어 "${user.storeName || '우리 스토어'}"의 사장님입니다.
+아래는 "${productName}" 상품에 달린 고객 리뷰입니다.
+
+[고객 리뷰]
+"${reviewText}"
+
+${insight ? `[이 상품의 실제 셀링포인트 — 답변에 자연스럽게 1개 정도만 녹여서 활용]\n${insight}` : ''}
+
+규칙:
+- 리뷰에서 실제로 언급된 내용에 구체적으로 반응할 것 (뻔한 템플릿 문장 반복 금지)
+- 상품명을 자연스럽게 한 번 언급
+- 2~4문장, 자연스러운 한국어, 정중한 존댓말
+- 이모지는 최대 1개
+- 답변 텍스트만 출력 (설명 없이)`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-5', max_tokens: 400,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  return extractText(response);
+}
+
+// ── 상품 상세페이지 이미지를 분석해서 셀링포인트 추출 (Claude Vision) ──────
+async function analyzeProductDetail(page, productUrl) {
+  await page.goto(productUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+  await delay(2000);
+
+  const imageUrls = await page.evaluate(() => {
+    const imgs = [...document.querySelectorAll(
+      'div[class*="detail"] img, div[class*="prdDetail"] img, #INTRODUCE img, div[class*="se-main-container"] img'
+    )];
+    return [...new Set(imgs.map(img => img.src).filter(src => src && src.startsWith('http')))].slice(0, 5);
+  });
+  if (!imageUrls.length) throw new Error('상세페이지에서 분석할 이미지를 찾지 못했습니다.');
+
+  const imageBlocks = [];
+  for (const url of imageUrls) {
+    try {
+      const imgRes = await fetch(url);
+      if (!imgRes.ok) continue;
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      const mime = imgRes.headers.get('content-type') || 'image/jpeg';
+      imageBlocks.push({ type: 'image', source: { type: 'base64', media_type: mime, data: buf.toString('base64') } });
+    } catch (e) { /* 이미지 하나 실패는 건너뜀 */ }
+  }
+  if (!imageBlocks.length) throw new Error('상세페이지 이미지를 불러오지 못했습니다.');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-5', max_tokens: 500,
+    messages: [{
+      role: 'user',
+      content: [
+        ...imageBlocks,
+        { type: 'text', text: '이 상품 상세페이지 이미지들을 보고, 고객 리뷰 답변에 자연스럽게 녹일 수 있는 실제 셀링포인트(소재/기능/특징 등)를 5개 이내로 간결하게 한글로 정리해주세요. 이미지에 실제로 나타난 내용만 쓰고 추측하지 마세요.' }
+      ]
+    }]
+  });
+  return extractText(response);
+}
+
 async function generateAIReply(user, reviewText, existingReplies = []) {
   const toneMap = {
     warm: '따뜻하고 가족 같은 친근한 말투', professional: '격식 있고 신뢰감 있는 전문적인 말투',
@@ -1053,6 +1226,128 @@ app.post('/api/reply', requireAuth, async (req, res) => {
     res.json({ success: true, matchedIndex: matched.index, matchedText: matched.matchedText });
   } catch(err) {
     console.error('댓글 등록 오류:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 스마트스토어 리뷰 자동화 API
+// ══════════════════════════════════════════════════════════════════════════
+
+// 스마트스토어 네이버 로그인 팝업 열기
+app.post('/api/smartstore/open-login', requireAuth, async (req, res) => {
+  try {
+    const sessionId = req.session.id;
+    res.json({ success: true, message: '네이버 로그인 창이 열렸습니다.' });
+    smartStoreLoginWithPopup(sessionId)
+      .then(async () => {
+        req.user.smartStoreConnected = true;
+        db.users.set(req.user.userId, req.user);
+        await saveDB();
+      })
+      .catch(err => console.error('스마트스토어 로그인 오류:', err.message));
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// 로그인 상태 확인
+app.get('/api/smartstore/login-status', requireAuth, (req, res) => {
+  const s = db.browserSessions.get(smartStoreSessionId(req.session.id));
+  res.json({ loggedIn: !!(s && s.loggedIn) });
+});
+
+// 화면에 보이는 리뷰 동기화 + 미답변 목록 조회
+app.get('/api/smartstore/reviews', requireAuth, async (req, res) => {
+  try {
+    const s = db.browserSessions.get(smartStoreSessionId(req.session.id));
+    if (!s || !s.loggedIn) return res.status(401).json({ error: '먼저 네이버 로그인을 해주세요.' });
+
+    const rows = await syncSmartStoreReviews(s.page);
+
+    req.user.smartStoreReviews = req.user.smartStoreReviews || [];
+    let added = 0;
+    for (const row of rows) {
+      const key = row.reviewId ? `review:${row.reviewId}` : [row.productNo, row.createDate, row.writerId].join('|');
+      if (!req.user.smartStoreReviews.find(r => r.sourceKey === key)) {
+        req.user.smartStoreReviews.unshift({
+          id: generateId(), sourceKey: key, reviewId: row.reviewId,
+          product: row.productName, productNo: row.productNo,
+          customer: row.writerId || '구매자', text: row.reviewContent,
+          reply: '', status: 'ready', createdAt: new Date().toISOString()
+        });
+        added++;
+      }
+    }
+    if (added > 0) { db.users.set(req.user.userId, req.user); await saveDB(); }
+
+    res.json({ reviews: req.user.smartStoreReviews.filter(r => r.status !== 'posted'), added });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI 답변 생성
+app.post('/api/smartstore/generate', requireAuth, requireTokens, async (req, res) => {
+  const { reviewId } = req.body;
+  try {
+    const review = (req.user.smartStoreReviews || []).find(r => r.id === reviewId);
+    if (!review) return res.status(404).json({ error: '리뷰를 찾을 수 없습니다.' });
+
+    const insight = (req.user.smartStoreProductInsights || {})[review.productNo] || '';
+    const reply = await generateSmartStoreReply(req.user, review.text, review.product, insight);
+    review.reply = reply;
+
+    req.user.tokens = (req.user.tokens || 0) - 1;
+    db.users.set(req.user.userId, req.user);
+    await saveDB();
+    res.json({ reply, tokensLeft: req.user.tokens });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 승인된 답글 실제 네이버에 등록
+app.post('/api/smartstore/reply', requireAuth, async (req, res) => {
+  const { reviewId, replyText } = req.body;
+  try {
+    const s = db.browserSessions.get(smartStoreSessionId(req.session.id));
+    if (!s || !s.loggedIn) return res.status(401).json({ error: '먼저 네이버 로그인을 해주세요.' });
+
+    const review = (req.user.smartStoreReviews || []).find(r => r.id === reviewId);
+    if (!review) return res.status(404).json({ error: '리뷰를 찾을 수 없습니다.' });
+    if (!review.reviewId) throw new Error('이 리뷰는 자동 등록용 식별자가 없습니다. 새로고침 후 다시 시도해주세요.');
+    if (!replyText || !replyText.trim()) return res.status(400).json({ error: '답글 내용이 비어있습니다.' });
+
+    await postSmartStoreReply(s.page, review.reviewId, replyText);
+
+    review.status = 'posted';
+    review.reply = replyText;
+    review.postedAt = new Date().toISOString();
+    db.users.set(req.user.userId, req.user);
+    await saveDB();
+    res.json({ success: true });
+  } catch(err) {
+    console.error('[스마트스토어 답글 등록 오류]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 상품 상세페이지 이미지 분석 → 셀링포인트 추출
+app.post('/api/smartstore/analyze-product', requireAuth, requireTokens, async (req, res) => {
+  const { productUrl, productNo } = req.body;
+  if (!productUrl) return res.status(400).json({ error: '상품 상세페이지 URL을 입력해주세요.' });
+  try {
+    const { page } = await getOrCreateBrowser(req.session.id);
+    const insight = await analyzeProductDetail(page, productUrl);
+
+    req.user.smartStoreProductInsights = req.user.smartStoreProductInsights || {};
+    req.user.smartStoreProductInsights[productNo || productUrl] = insight;
+    req.user.tokens = (req.user.tokens || 0) - 1;
+    db.users.set(req.user.userId, req.user);
+    await saveDB();
+    res.json({ insight, tokensLeft: req.user.tokens });
+  } catch(err) {
     res.status(500).json({ error: err.message });
   }
 });

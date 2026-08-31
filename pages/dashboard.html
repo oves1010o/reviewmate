@@ -225,8 +225,12 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
       <span class="icon">📊</span> 대시보드
     </a>
     <a class="nav-item" onclick="showScreen('reviews')">
-      <span class="icon">💬</span> 리뷰 관리
+      <span class="icon">💬</span> 스마트플레이스 리뷰관리
     </a>
+    <a class="nav-item" onclick="showScreen('storeReviews')">
+      <span class="icon">🛒</span> 스마트스토어 리뷰관리
+    </a>
+    <div style="height:1px;background:var(--border);margin:10px 16px;"></div>
     <a class="nav-item" onclick="showScreen('settings')">
       <span class="icon">⚙️</span> 매장 설정
     </a>
@@ -318,12 +322,48 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
     <!-- 리뷰 관리 화면 -->
     <div class="screen" id="screenReviews">
       <div class="section-header">
-        <div class="section-title2">리뷰 관리</div>
+        <div class="section-title2">스마트플레이스 리뷰 관리</div>
         <button class="btn-sm btn-ghost" onclick="loadReviews()">🔄 새로고침</button>
       </div>
       <div class="reviews-list" id="reviewsList">
         <div style="text-align:center;padding:3rem;color:var(--muted);font-size:.9rem">
           리뷰를 불러오는 중...
+        </div>
+      </div>
+    </div>
+
+    <!-- 스마트스토어 리뷰 관리 화면 -->
+    <div class="screen" id="screenStoreReviews">
+      <div class="settings-card" id="storeConnectBanner">
+        <div class="settings-title" style="margin:0 0 10px;padding:0;border:none">🛒 스마트스토어 연동</div>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+          버튼을 누르면 네이버 로그인 창이 열립니다. 직접 로그인하시면 상품 리뷰를 자동으로 불러올 수 있어요.
+        </p>
+        <div id="storeConnectResult" style="display:none;padding:10px 12px;border-radius:8px;font-size:.85rem;margin-bottom:10px"></div>
+        <button class="btn-sm btn-green" id="storeConnectBtn" onclick="connectSmartStore()" style="padding:10px 16px">🔐 네이버 로그인 창 열기</button>
+        <button class="btn-sm btn-ghost" id="storeConfirmBtn" onclick="confirmSmartStoreLogin()" style="padding:10px 16px;display:none;margin-left:8px">✅ 로그인 완료 확인</button>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-title" style="margin:0 0 10px;padding:0;border:none">🔍 상품 상세페이지 분석</div>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+          상품 상세페이지 URL을 넣으면 이미지를 분석해서 실제 셀링포인트를 답변에 자연스럽게 녹여줘요.
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="storeProductUrl" placeholder="https://smartstore.naver.com/.../products/..." style="flex:1;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:.85rem">
+          <input type="text" id="storeProductNo" placeholder="상품번호(선택)" style="width:130px;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:.85rem">
+          <button class="btn-sm btn-green" id="analyzeBtn" onclick="analyzeProduct()">분석하기</button>
+        </div>
+        <div id="analyzeResult" style="display:none;background:var(--bg,#f7f8f5);border-radius:8px;padding:12px 14px;font-size:.85rem;line-height:1.7;white-space:pre-line"></div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title2">미답변 상품 리뷰</div>
+        <button class="btn-sm btn-ghost" onclick="loadStoreReviews()">🔄 새로고침</button>
+      </div>
+      <div class="reviews-list" id="storeReviewsList">
+        <div style="text-align:center;padding:3rem;color:var(--muted);font-size:.9rem">
+          먼저 위에서 네이버 로그인을 해주세요.
         </div>
       </div>
     </div>
@@ -822,6 +862,176 @@ async function confirmNaverLogin() {
   btn.disabled=false;
   btn.innerHTML="✅ 로그인 완료 확인";
 }
+
+// ── 스마트스토어 ──────────────────────────────────────────────────────────
+let storeReviews = [];
+
+async function connectSmartStore() {
+  const btn = document.getElementById('storeConnectBtn');
+  const r = document.getElementById('storeConnectResult');
+  btn.disabled = true;
+  btn.innerHTML = '연결 중...';
+  try {
+    const res = await fetch(`${API}/smartstore/open-login`, { method: 'POST', credentials: 'include' });
+    const data = await res.json();
+    if (data.success) {
+      r.style.display = 'block';
+      r.style.background = '#eef7ff'; r.style.color = '#0b5fa8';
+      r.innerHTML = '네이버 로그인 창이 열렸습니다! 로그인 후 아래 버튼을 눌러주세요.';
+      document.getElementById('storeConfirmBtn').style.display = 'inline-flex';
+    } else {
+      r.style.display = 'block'; r.textContent = '오류: ' + (data.error || '알 수 없는 오류');
+    }
+  } catch(e) { r.style.display = 'block'; r.textContent = '오류: ' + e.message; }
+  btn.disabled = false;
+  btn.innerHTML = '🔐 네이버 로그인 창 열기';
+}
+
+async function confirmSmartStoreLogin() {
+  const btn = document.getElementById('storeConfirmBtn');
+  const r = document.getElementById('storeConnectResult');
+  btn.disabled = true; btn.innerHTML = '확인 중...';
+  try {
+    const res = await fetch(`${API}/smartstore/login-status`, { credentials: 'include' });
+    const data = await res.json();
+    if (data.loggedIn) {
+      r.style.background = '#f0fff4'; r.style.color = '#1a7a3a';
+      r.innerHTML = '✓ 스마트스토어 연결 완료!';
+      btn.style.display = 'none';
+      loadStoreReviews();
+    } else {
+      r.style.background = '#fff8e0'; r.style.color = '#7a5000';
+      r.innerHTML = '⚠ 아직 로그인이 감지되지 않았어요. 로그인 창에서 로그인 후 다시 눌러주세요.';
+    }
+  } catch(e) { r.textContent = '오류: ' + e.message; }
+  btn.disabled = false; btn.innerHTML = '✅ 로그인 완료 확인';
+}
+
+async function analyzeProduct() {
+  const url = document.getElementById('storeProductUrl').value.trim();
+  const productNo = document.getElementById('storeProductNo').value.trim();
+  if (!url) { alert('상품 상세페이지 URL을 입력해주세요.'); return; }
+  const btn = document.getElementById('analyzeBtn');
+  const box = document.getElementById('analyzeResult');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API}/smartstore/analyze-product`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productUrl: url, productNo })
+    });
+    const data = await res.json();
+    if (data.code === 'NO_TOKENS') {
+      if (confirm('토큰이 부족합니다. 충전 페이지로 이동할까요?')) window.location.href = 'charge.html';
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || '분석 실패');
+    box.style.display = 'block';
+    box.textContent = data.insight;
+  } catch(e) {
+    box.style.display = 'block';
+    box.textContent = '오류: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = '분석하기';
+}
+
+async function loadStoreReviews() {
+  const list = document.getElementById('storeReviewsList');
+  try {
+    const res = await fetch(`${API}/smartstore/reviews`, { credentials: 'include' });
+    const data = await res.json();
+    if (res.status === 401) {
+      list.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--muted);font-size:.9rem">먼저 위에서 네이버 로그인을 해주세요.</div>';
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || '조회 실패');
+    storeReviews = data.reviews || [];
+    renderStoreReviews();
+  } catch(e) {
+    list.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--muted);font-size:.9rem">불러오기 실패: ${e.message}</div>`;
+  }
+}
+
+function renderStoreReviews() {
+  const list = document.getElementById('storeReviewsList');
+  if (!storeReviews.length) {
+    list.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--muted)"><div style="font-size:2rem;margin-bottom:.8rem">🎉</div><div>미답변 상품 리뷰가 없습니다!</div></div>';
+    return;
+  }
+  list.innerHTML = storeReviews.map((r, i) => `
+    <div class="review-card" id="store-card-${i}">
+      <div class="review-card-header">
+        <div class="review-meta">
+          <span class="review-new">${r.product}</span>
+          <span class="review-date">${r.customer || ''}</span>
+        </div>
+      </div>
+      <div class="review-text">${r.text}</div>
+      <div class="review-actions">
+        <button class="btn-sm btn-green" onclick="generateStoreReply(${i})">🤖 AI 답변 생성</button>
+        <button class="btn-sm btn-ghost" id="store-postBtn-${i}" onclick="postStoreReply(${i})" style="display:${r.reply ? 'inline-flex' : 'none'}">📤 댓글 달기</button>
+      </div>
+      <div class="reply-wrap ${r.reply ? 'visible' : ''}" id="store-reply-${i}">
+        <div class="reply-header"><span class="reply-label">✦ AI 생성 답변</span></div>
+        <textarea class="reply-edit" id="store-replyText-${i}" rows="3">${r.reply || ''}</textarea>
+        <div class="reply-actions">
+          <button class="btn-sm btn-green" onclick="postStoreReply(${i})" style="flex:1">📤 네이버에 등록</button>
+          <button class="btn-sm btn-ghost" onclick="generateStoreReply(${i})">🔄 재생성</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function generateStoreReply(i) {
+  const card = document.getElementById(`store-card-${i}`);
+  const btn = card.querySelector('.btn-green');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API}/smartstore/generate`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewId: storeReviews[i].id })
+    });
+    const data = await res.json();
+    if (res.status === 402 || data.code === 'NO_TOKENS') {
+      if (confirm('토큰이 부족합니다. 충전 페이지로 이동할까요?')) window.location.href = 'charge.html';
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || '생성 실패');
+    storeReviews[i].reply = data.reply;
+    document.getElementById(`store-replyText-${i}`).value = data.reply;
+    document.getElementById(`store-reply-${i}`).classList.add('visible');
+    document.getElementById(`store-postBtn-${i}`).style.display = 'inline-flex';
+    if (typeof data.tokensLeft === 'number') {
+      userTokens = data.tokensLeft;
+      document.getElementById('usageCount').textContent = `${userTokens}개`;
+      document.getElementById('sidebarPlan').textContent = `토큰 ${userTokens}개`;
+    }
+  } catch(e) {
+    alert('AI 생성 오류: ' + e.message);
+  }
+  btn.disabled = false; btn.innerHTML = '🤖 AI 답변 생성';
+}
+
+async function postStoreReply(i) {
+  const replyText = document.getElementById(`store-replyText-${i}`).value;
+  if (!replyText.trim()) { alert('먼저 AI 답변을 생성해주세요!'); return; }
+  const card = document.getElementById(`store-card-${i}`);
+  try {
+    const res = await fetch(`${API}/smartstore/reply`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewId: storeReviews[i].id, replyText })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '등록 실패');
+    card.style.opacity = '.4'; card.style.pointerEvents = 'none';
+  } catch(e) {
+    alert('❌ 네이버 등록 오류: ' + e.message);
+  }
+}
+
 async function checkLoginStatus() {
   const res = await fetch(`${API}/login/status`, { credentials: 'include' });
   const data = await res.json();
@@ -850,8 +1060,26 @@ function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('screen'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');
-  const titles = {dashboard:'대시보드',reviews:'리뷰 관리',settings:'매장 설정',cs:'불만리뷰 관리'};
+  if (typeof event !== 'undefined' && event?.currentTarget?.classList?.contains('nav-item')) {
+    event.currentTarget.classList.add('active');
+  }
+  const titles = {dashboard:'대시보드',reviews:'스마트플레이스 리뷰관리',storeReviews:'스마트스토어 리뷰관리',settings:'매장 설정',cs:'불만리뷰 관리'};
   document.getElementById('topbarTitle').textContent = titles[name] || '';
+  if (name === 'storeReviews') checkSmartStoreStatus();
+}
+
+async function checkSmartStoreStatus() {
+  try {
+    const res = await fetch(`${API}/smartstore/login-status`, { credentials: 'include' });
+    const data = await res.json();
+    if (data.loggedIn) {
+      document.getElementById('storeConnectResult').style.display = 'block';
+      document.getElementById('storeConnectResult').style.background = '#f0fff4';
+      document.getElementById('storeConnectResult').style.color = '#1a7a3a';
+      document.getElementById('storeConnectResult').innerHTML = '✓ 스마트스토어 연결 완료!';
+      loadStoreReviews();
+    }
+  } catch(e) {}
 }
 
 async function handleLogout() {
