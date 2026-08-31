@@ -6,6 +6,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const http = require('http');
+const net = require('net');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -117,6 +119,29 @@ function requireTokens(req, res, next) {
     return res.status(402).json({ error: '토큰이 부족합니다. 충전 후 이용해주세요.', code: 'NO_TOKENS' });
   }
   next();
+}
+
+// ── 네이버 로그인 화면공유(VNC) 잠금 ─────────────────────────────────────
+// 서버 안의 가상 화면(Xvfb)은 하나뿐이라, 동시에 두 명이 로그인하면 서로의
+// 화면(및 로그인 정보)이 보이게 됨. 그래서 한 번에 한 세션만 화면을 볼 수
+// 있도록 잠그고, 화면을 보려면 발급받은 토큰이 있어야만 접속을 허용한다.
+let visibleLoginLock = null; // { sessionId, token, expiresAt }
+
+function acquireVisibleLoginLock(sessionId) {
+  if (visibleLoginLock && visibleLoginLock.expiresAt > Date.now() && visibleLoginLock.sessionId !== sessionId) {
+    return null; // 다른 사람이 로그인 중
+  }
+  const token = generateId() + generateId();
+  visibleLoginLock = { sessionId, token, expiresAt: Date.now() + 10 * 60 * 1000 }; // 10분 제한
+  return token;
+}
+
+function releaseVisibleLoginLock(sessionId) {
+  if (visibleLoginLock && visibleLoginLock.sessionId === sessionId) visibleLoginLock = null;
+}
+
+function isValidVncToken(token) {
+  return !!(visibleLoginLock && visibleLoginLock.token === token && visibleLoginLock.expiresAt > Date.now());
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -943,11 +968,17 @@ app.post("/api/naver-open-login", requireAuth, async (req, res) => {
   try {
     const { placeId } = req.body;
     const sessionId = req.session.id;
+    const vncToken = acquireVisibleLoginLock(sessionId);
+    if (!vncToken) {
+      return res.json({ success: false, error: '지금 다른 사용자가 로그인 화면을 사용 중이에요. 잠시 후 다시 시도해주세요.' });
+    }
     if (placeId) { req.user.placeId = placeId; db.users.set(req.user.userId, req.user); await saveDB(); }
-    res.json({ success: true, message: "로그인 창이 열렸습니다" });
+    res.json({ success: true, message: "로그인 창이 열렸습니다", vncToken });
     naverLoginWithPopup(sessionId, req.user.placeId || placeId)
-      .catch(err => console.error('네이버 로그인 오류:', err.message));
+      .catch(err => console.error('네이버 로그인 오류:', err.message))
+      .finally(() => releaseVisibleLoginLock(sessionId));
   } catch(e) {
+    releaseVisibleLoginLock(req.session.id);
     res.json({ success: false, error: e.message });
   }
 });
@@ -1241,15 +1272,21 @@ app.post('/api/reply', requireAuth, async (req, res) => {
 app.post('/api/smartstore/open-login', requireAuth, async (req, res) => {
   try {
     const sessionId = req.session.id;
-    res.json({ success: true, message: '네이버 로그인 창이 열렸습니다.' });
+    const vncToken = acquireVisibleLoginLock(sessionId);
+    if (!vncToken) {
+      return res.json({ success: false, error: '지금 다른 사용자가 로그인 화면을 사용 중이에요. 잠시 후 다시 시도해주세요.' });
+    }
+    res.json({ success: true, message: '네이버 로그인 창이 열렸습니다.', vncToken });
     smartStoreLoginWithPopup(sessionId)
       .then(async () => {
         req.user.smartStoreConnected = true;
         db.users.set(req.user.userId, req.user);
         await saveDB();
       })
-      .catch(err => console.error('스마트스토어 로그인 오류:', err.message));
+      .catch(err => console.error('스마트스토어 로그인 오류:', err.message))
+      .finally(() => releaseVisibleLoginLock(sessionId));
   } catch(e) {
+    releaseVisibleLoginLock(req.session.id);
     res.json({ success: false, error: e.message });
   }
 });
@@ -1540,6 +1577,36 @@ app.get('/dashboard.html', requireAuth, (req, res) => {
 // health check
 app.get('/api/health', (req, res) => res.json({ok:true, ts: Date.now()}));
 
+// ── 네이버 로그인 화면공유(VNC) 웹소켓 프록시 ────────────────────────────
+// 브라우저는 raw VNC 프로토콜을 못 쓰므로, 로컬 websockify(포트 6080)로
+// 들어오는 웹소켓 연결을 그대로 이어준다. /vnc?token=... 형태로만 접속 허용.
+const httpServer = http.createServer(app);
+
+httpServer.on('upgrade', (req, socket, head) => {
+  let pathname = '', token = '';
+  try {
+    const parsed = new URL(req.url, 'http://localhost');
+    pathname = parsed.pathname;
+    token = parsed.searchParams.get('token') || '';
+  } catch (e) { socket.destroy(); return; }
+
+  if (pathname !== '/vnc') { socket.destroy(); return; }
+  if (!isValidVncToken(token)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  const target = net.connect(6080, '127.0.0.1', () => {
+    const headerLines = Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n');
+    target.write(`GET / HTTP/1.1\r\n${headerLines}\r\n\r\n`);
+    if (head && head.length) target.write(head);
+    socket.pipe(target).pipe(socket);
+  });
+  target.on('error', () => socket.destroy());
+  socket.on('error', () => target.destroy());
+});
+
 (async () => {
   try {
     db = await loadDB();
@@ -1548,7 +1615,7 @@ app.get('/api/health', (req, res) => res.json({ok:true, ts: Date.now()}));
     console.error('❌ Postgres 연결 실패:', e.message);
     process.exit(1);
   }
-  app.listen(process.env.PORT||3001, () => console.log('✅ 리뷰메이트 서버 실행 중: http://localhost:3001'));
+  httpServer.listen(process.env.PORT||3001, () => console.log('✅ 리뷰메이트 서버 실행 중: http://localhost:3001'));
 })();
 
 

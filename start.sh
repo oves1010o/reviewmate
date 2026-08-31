@@ -25,5 +25,10 @@ if ! kill -0 "$XVFB_PID" 2>/dev/null; then
   echo "[start.sh] ⚠️ Xvfb 프로세스가 죽어있습니다 (PID $XVFB_PID). 헤드풀 브라우저 실행이 실패할 수 있습니다."
 fi
 
+echo "[start.sh] 화면공유(VNC) 서버 준비 중..."
+x11vnc -display :99 -nopw -forever -shared -rfbport 5900 -bg -o /tmp/x11vnc.log
+websockify --heartbeat=30 6080 localhost:5900 &
+echo "[start.sh] VNC 준비 완료 (포트 6080)"
+
 echo "[start.sh] 서버 시작..."
 exec node server.js

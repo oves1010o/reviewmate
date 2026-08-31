@@ -814,11 +814,14 @@ async function connectNaver() {
     const res=await fetch("/api/naver-open-login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({placeId:document.getElementById("cfgPlaceId")?.value.trim()||""}),credentials:"include"});
     const data=await res.json();
     if(data.success){
-      
       r.style.display="block";
-      r.innerHTML="네이버 로그인 창이 열렸습니다! 로그인 후 아래 버튼을 눌러주세요";
+      r.innerHTML="네이버 로그인 창이 열렸습니다! 아래 화면에서 직접 로그인해주세요.";
       document.getElementById("loginStatusWrap").style.display="block";
       document.getElementById("confirmLoginBtn").style.display="block";
+      if (data.vncToken) openVncViewer(data.vncToken);
+    } else {
+      r.style.display="block";
+      r.textContent = "오류: " + (data.error || "알 수 없는 오류");
     }
   }catch(e){r.style.display="block";r.textContent="오류:"+e.message;}
   btn.disabled=false;
@@ -850,6 +853,7 @@ async function confirmNaverLogin() {
       r.style.border="1px solid #6fcf97";
       r.innerHTML="✓ 네이버 연결 완료!";
       document.getElementById("loginStatusWrap").style.display="none";
+      closeVncViewer();
       loadReviews();
     } else {
       r.style.display="block";
@@ -879,8 +883,9 @@ async function connectSmartStore() {
     if (data.success) {
       r.style.display = 'block';
       r.style.background = '#eef7ff'; r.style.color = '#0b5fa8';
-      r.innerHTML = '네이버 로그인 창이 열렸습니다! 로그인 후 아래 버튼을 눌러주세요.';
+      r.innerHTML = '네이버 로그인 창이 열렸습니다! 아래 화면에서 직접 로그인해주세요.';
       document.getElementById('storeConfirmBtn').style.display = 'inline-flex';
+      if (data.vncToken) openVncViewer(data.vncToken);
     } else {
       r.style.display = 'block'; r.textContent = '오류: ' + (data.error || '알 수 없는 오류');
     }
@@ -900,6 +905,7 @@ async function confirmSmartStoreLogin() {
       r.style.background = '#f0fff4'; r.style.color = '#1a7a3a';
       r.innerHTML = '✓ 스마트스토어 연결 완료!';
       btn.style.display = 'none';
+      closeVncViewer();
       loadStoreReviews();
     } else {
       r.style.background = '#fff8e0'; r.style.color = '#7a5000';
@@ -1208,11 +1214,46 @@ function copyCSReply() {
   });
 }
 
+// ── 네이버 로그인 화면공유(VNC) 뷰어 ──────────────────────────────────────
+let vncRfb = null;
+
+async function openVncViewer(token) {
+  const modal = document.getElementById('vncModal');
+  const screenEl = document.getElementById('vncScreen');
+  modal.style.display = 'flex';
+  screenEl.textContent = '화면 연결 중...';
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js');
+    const RFB = mod.default;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/vnc?token=${encodeURIComponent(token)}`;
+    screenEl.innerHTML = '';
+    vncRfb = new RFB(screenEl, url);
+    vncRfb.scaleViewport = true;
+    vncRfb.addEventListener('disconnect', () => {
+      screenEl.textContent = '화면 연결이 종료됐습니다.';
+    });
+  } catch(e) {
+    screenEl.textContent = '화면을 불러오지 못했습니다: ' + e.message;
+  }
+}
+
+function closeVncViewer() {
+  const modal = document.getElementById('vncModal');
+  if (modal) modal.style.display = 'none';
+  if (vncRfb) { try { vncRfb.disconnect(); } catch(e) {} vncRfb = null; }
+}
 </script>
 
-  
-
-  
+<div id="vncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#1e1e1e;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);max-width:94vw;max-height:94vh;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#2a2a2a;color:#fff;font-size:.85rem;">
+      <span>🔐 네이버 로그인</span>
+      <button onclick="closeVncViewer()" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
+    </div>
+    <div id="vncScreen" style="width:520px;max-width:90vw;height:650px;max-height:80vh;background:#000;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:.85rem;"></div>
+  </div>
+</div>
 
   </body>
 </html>
