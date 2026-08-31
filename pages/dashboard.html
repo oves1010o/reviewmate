@@ -36,7 +36,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink)
   display:inline-block;padding:2px 8px;border-radius:10px;
 }
 
-.nav-menu{padding:1rem 0;flex:1;}
+.nav-menu{padding:1rem 0;flex:1;display:flex;flex-direction:column;}
 .nav-item{
   display:flex;align-items:center;gap:10px;
   padding:.75rem 1.5rem;font-size:.85rem;color:rgba(255,255,255,.55);
@@ -230,18 +230,19 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
     <a class="nav-item" onclick="showScreen('storeReviews')">
       <span class="icon">🛒</span> 스마트스토어 리뷰관리
     </a>
-    <div style="height:1px;background:var(--border);margin:10px 16px;"></div>
-    <a class="nav-item" onclick="showScreen('settings')">
-      <span class="icon">⚙️</span> 매장 설정
-    </a>
-    <a class="nav-item" onclick="showScreen('cs')">
-      <span class="icon">💬</span> 불만리뷰 관리
-    </a>
-    <a class="nav-item" href="https://open.kakao.com/o/sCAh8eLi" target="_blank" rel="noopener">
-      <span class="icon" style="display:inline-flex;width:16px;height:16px;vertical-align:-3px">
-        <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="6" fill="#FEE500"/><ellipse cx="10" cy="9" rx="6" ry="5" fill="#391B1B"/><path d="M6 13 L4.3 16.2 L8.2 13.6 Z" fill="#391B1B"/></svg>
-      </span> 관리자에게 문의하기
-    </a>
+    <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)">
+      <a class="nav-item" onclick="showScreen('settings')">
+        <span class="icon">⚙️</span> 매장 설정
+      </a>
+      <a class="nav-item" onclick="showScreen('cs')">
+        <span class="icon">💬</span> 불만리뷰 관리
+      </a>
+      <a class="nav-item" href="https://open.kakao.com/o/sCAh8eLi" target="_blank" rel="noopener">
+        <span class="icon" style="display:inline-flex;width:16px;height:16px;vertical-align:-3px">
+          <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="6" fill="#FEE500"/><ellipse cx="10" cy="9" rx="6" ry="5" fill="#391B1B"/><path d="M6 13 L4.3 16.2 L8.2 13.6 Z" fill="#391B1B"/></svg>
+        </span> 관리자에게 문의하기
+      </a>
+    </div>
   </nav>
   <div class="sidebar-bottom">
     <div class="usage-label">보유 토큰</div>
