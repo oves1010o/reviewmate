@@ -943,7 +943,8 @@ app.post("/api/naver-open-login", requireAuth, async (req, res) => {
     const sessionId = req.session.id;
     if (placeId) { req.user.placeId = placeId; db.users.set(req.user.userId, req.user); await saveDB(); }
     res.json({ success: true, message: "로그인 창이 열렸습니다" });
-    naverLoginWithPopup(sessionId, req.user.placeId || placeId);
+    naverLoginWithPopup(sessionId, req.user.placeId || placeId)
+      .catch(err => console.error('네이버 로그인 오류:', err.message));
   } catch(e) {
     res.json({ success: false, error: e.message });
   }

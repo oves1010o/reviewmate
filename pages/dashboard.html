@@ -95,6 +95,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink)
   padding:8px 16px;border-radius:8px;border:none;
   font-size:.8rem;font-weight:700;font-family:'Noto Sans KR',sans-serif;
   cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px;
+  white-space:nowrap;flex-shrink:0;
 }
 .btn-green{background:var(--green);color:#fff;}
 .btn-green:hover{background:var(--green-dark);}
@@ -300,8 +301,8 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
       <div class="settings-card">
         <div class="section-header">
           <div class="settings-title" style="margin:0;padding:0;border:none">⚡ 전체 자동 처리</div>
-          <div style="display:flex;gap:8px;">
-            <select id="reviewDays" onchange="loadReviews()" style="font-size:.78rem;padding:4px 8px;border-radius:6px;border:1px solid #ddd;background:white">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <select id="reviewDays" onchange="loadReviews()" style="font-size:.78rem;padding:4px 8px;border-radius:6px;border:1px solid #ddd;background:white;flex-shrink:0">
               <option value="7">최근 7일</option>
               <option value="14">최근 14일</option>
               <option value="30" selected>최근 30일</option>
