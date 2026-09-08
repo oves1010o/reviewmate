@@ -5,6 +5,11 @@ echo "[start.sh] Xvfb 가상 화면 준비 중..."
 mkdir -p /tmp/.X11-unix
 chmod 1777 /tmp/.X11-unix
 
+# 이전 실행(비정상 종료/재시작)이 남긴 잠금파일이 있으면 Xvfb가 아예 못 뜨므로 먼저 정리
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+pkill -9 Xvfb 2>/dev/null || true
+pkill -9 x11vnc 2>/dev/null || true
+
 Xvfb :99 -screen 0 1280x1024x24 -ac +render -noreset &
 XVFB_PID=$!
 
