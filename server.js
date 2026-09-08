@@ -438,6 +438,10 @@ async function getOrCreateBrowser(sessionId, headless = true) {
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-blink-features=AutomationControlled',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--no-zygote',
     '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   ];
 
@@ -452,6 +456,7 @@ async function getOrCreateBrowser(sessionId, headless = true) {
     headless: headless ? 'new' : false,
     args: launchArgs,
     defaultViewport: null,
+    dumpio: true, // 크롬 실행 실패 원인을 서버 로그(stdout/stderr)로 바로 확인하기 위한 임시 디버그 옵션
     env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' }
   });
 
@@ -536,7 +541,11 @@ async function createFreshBrowser(sessionId, headless = true) {
   const launchArgs = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
-    '--disable-blink-features=AutomationControlled'
+    '--disable-blink-features=AutomationControlled',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--no-zygote'
   ];
   if (!headless) {
     launchArgs.push('--window-position=200,100');
@@ -546,6 +555,7 @@ async function createFreshBrowser(sessionId, headless = true) {
     headless: headless ? 'new' : false,
     args: launchArgs,
     defaultViewport: null,
+    dumpio: true, // 크롬 실행 실패 원인을 서버 로그(stdout/stderr)로 바로 확인하기 위한 임시 디버그 옵션
     env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' }
   });
   const page = await browser.newPage();
