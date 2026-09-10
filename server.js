@@ -6,8 +6,6 @@ const Anthropic = require('@anthropic-ai/sdk');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const path = require('path');
-const http = require('http');
-const net = require('net');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -121,28 +119,24 @@ function requireTokens(req, res, next) {
   next();
 }
 
-// ── 네이버 로그인 화면공유(VNC) 잠금 ─────────────────────────────────────
-// 서버 안의 가상 화면(Xvfb)은 하나뿐이라, 동시에 두 명이 로그인하면 서로의
-// 화면(및 로그인 정보)이 보이게 됨. 그래서 한 번에 한 세션만 화면을 볼 수
-// 있도록 잠그고, 화면을 보려면 발급받은 토큰이 있어야만 접속을 허용한다.
-let visibleLoginLock = null; // { sessionId, token, expiresAt }
+// ── 크롬 확장프로그램 연동 코드 ──────────────────────────────────────────
+// 확장프로그램이 네이버 쿠키를 "어느 회원의 어느 세션"에 넣을지 식별하기 위한
+// 1회용 코드. 대시보드에서 발급 → 사용자가 확장프로그램에 입력 → 확장이 코드와
+// 함께 네이버 쿠키를 서버로 보내면, 코드로 회원을 찾아 헤드리스 세션에 주입한다.
+const connectCodes = new Map(); // code -> { userId, sessionId, type, placeId, expiresAt }
 
-function acquireVisibleLoginLock(sessionId) {
-  if (visibleLoginLock && visibleLoginLock.expiresAt > Date.now() && visibleLoginLock.sessionId !== sessionId) {
-    return null; // 다른 사람이 로그인 중
-  }
-  const token = generateId() + generateId();
-  visibleLoginLock = { sessionId, token, expiresAt: Date.now() + 10 * 60 * 1000 }; // 10분 제한
-  return token;
+function makeConnectCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 O,0,I,1 제외
+  let s = '';
+  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
 }
 
-function releaseVisibleLoginLock(sessionId) {
-  if (visibleLoginLock && visibleLoginLock.sessionId === sessionId) visibleLoginLock = null;
-}
-
-function isValidVncToken(token) {
-  return !!(visibleLoginLock && visibleLoginLock.token === token && visibleLoginLock.expiresAt > Date.now());
-}
+// 만료된 코드 주기적 정리
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of connectCodes) if (v.expiresAt < now) connectCodes.delete(k);
+}, 60 * 1000);
 
 // ══════════════════════════════════════════════════════════════════════════
 // 인증 API
@@ -434,6 +428,8 @@ async function getOrCreateBrowser(sessionId, headless = true) {
     }
   }
 
+  // 서버에서는 항상 headless(화면 없는) 브라우저만 사용한다. 로그인은 사용자
+  // 컴퓨터의 크롬 확장프로그램이 처리하므로 서버에 가짜 화면(Xvfb)이 필요 없다.
   const launchArgs = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -441,23 +437,13 @@ async function getOrCreateBrowser(sessionId, headless = true) {
     '--disable-dev-shm-usage',
     '--disable-gpu',
     '--disable-software-rasterizer',
-    '--no-zygote',
     '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   ];
 
-  if (!headless) {
-    launchArgs.push('--window-position=200,100');
-    launchArgs.push('--window-size=500,650');
-    launchArgs.push('--new-window');
-    launchArgs.push('--foreground');
-  }
-
   const browser = await puppeteer.launch({
-    headless: headless ? 'new' : false,
+    headless: 'new',
     args: launchArgs,
-    defaultViewport: null,
-    dumpio: true, // 크롬 실행 실패 원인을 서버 로그(stdout/stderr)로 바로 확인하기 위한 임시 디버그 옵션
-    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' }
+    defaultViewport: null
   });
 
   const page = await browser.newPage();
@@ -530,9 +516,9 @@ function getBrowserKey(sessionId, mode) {
   return `${sessionId}:${mode}`;
 }
 
-// ── 헬퍼: 새 브라우저 생성 (visible/headless 분리) ────────────────────────
+// ── 헬퍼: 새 (headless) 브라우저 생성 ────────────────────────────────────
 async function createFreshBrowser(sessionId, headless = true) {
-  const key = getBrowserKey(sessionId, headless ? 'headless' : 'visible');
+  const key = getBrowserKey(sessionId, 'headless');
   const existing = db.browserSessions.get(key);
   if (existing) {
     await existing.browser?.close().catch(() => {});
@@ -544,19 +530,12 @@ async function createFreshBrowser(sessionId, headless = true) {
     '--disable-blink-features=AutomationControlled',
     '--disable-dev-shm-usage',
     '--disable-gpu',
-    '--disable-software-rasterizer',
-    '--no-zygote'
+    '--disable-software-rasterizer'
   ];
-  if (!headless) {
-    launchArgs.push('--window-position=200,100');
-    launchArgs.push('--window-size=500,650');
-  }
   const browser = await puppeteer.launch({
-    headless: headless ? 'new' : false,
+    headless: 'new',
     args: launchArgs,
-    defaultViewport: null,
-    dumpio: true, // 크롬 실행 실패 원인을 서버 로그(stdout/stderr)로 바로 확인하기 위한 임시 디버그 옵션
-    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' }
+    defaultViewport: null
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1024, height: 700 });
@@ -564,12 +543,10 @@ async function createFreshBrowser(sessionId, headless = true) {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     window.chrome = { runtime: {} };
   });
-  const session = { browser, page, loggedIn: false, cookies: null, placeId: null, headless };
+  const session = { browser, page, loggedIn: false, cookies: null, placeId: null, headless: true };
   db.browserSessions.set(key, session);
-  // headless 세션은 기존 sessionId로도 저장 (다른 엔드포인트에서 접근용)
-  if (headless) {
-    db.browserSessions.set(sessionId, session);
-  }
+  // 다른 엔드포인트가 sessionId만으로 접근할 수 있도록 bare 키로도 저장
+  db.browserSessions.set(sessionId, session);
   return session;
 }
 
@@ -610,48 +587,21 @@ async function waitForNaverLogin(page, timeoutMs = 600000) {
   throw new Error('로그인 시간이 초과되었습니다. 다시 시도해주세요.');
 }
 
-// ── 팝업창 로그인 (사장님이 직접 로그인) ─────────────────────────────────
-async function naverLoginWithPopup(sessionId, placeId) {
-  // 1) visible 브라우저로 로그인 창 열기
-  const visible = await createFreshBrowser(`${sessionId}_visible`, false);
-  const { browser: visibleBrowser, page: p2 } = visible;
-  await p2.goto('https://nid.naver.com/nidlogin.login', {
-    waitUntil: 'domcontentloaded', timeout: 30000
-  });
-  try { await p2.bringToFront(); } catch (e) {}
-
-  // 2) 로그인 완료 감지 (visible 페이지에서만, goto 절대 안 함)
-  const cookies = await waitForNaverLogin(p2);
-  console.log('✅ 네이버 로그인 감지! 쿠키 추출 완료');
-
-  // 3) 새 headless 세션에 쿠키 주입
-  const headless = await createFreshBrowser(sessionId, true);
-  const { page: headlessPage } = headless;
-  await applyCookiesToPage(headlessPage, cookies);
-
-  // 4) 쿠키 반영 확인
-  await headlessPage.goto('https://naver.com', {
-    waitUntil: 'domcontentloaded', timeout: 20000
-  });
-  const copiedCookies = await headlessPage.cookies('https://naver.com');
-  const copiedLoggedIn = copiedCookies.some(c => c.name === 'NID_AUT' || c.name === 'NID_SES');
-  if (!copiedLoggedIn) throw new Error('headless 세션 로그인 검증 실패');
-
-  headless.cookies = copiedCookies;
-  headless.loggedIn = true;
-  headless.placeId = placeId;
-
-  // 5) headless 페이지에서 스마트플레이스 이동
-  await headlessPage.goto(
-    `https://smartplace.naver.com/bizes/place/${placeId}/reviews`,
-    { waitUntil: 'domcontentloaded', timeout: 30000 }
-  );
-  console.log('✅ 스마트플레이스 이동 완료!');
-
-  // 6) visible 브라우저 닫기
-  await visibleBrowser.close().catch(() => {});
-
-  return { success: true };
+// ── 확장프로그램이 넘겨준 네이버 쿠키를 headless 세션에 주입 ────────────────
+// (예전에는 서버가 직접 로그인 창을 띄웠지만, 이제 로그인은 사용자 PC의 크롬
+//  확장프로그램이 처리하고 서버는 쿠키만 받아서 넣는다.)
+async function applyNaverCookiesToSession(baseSessionId, cookies, { placeId } = {}) {
+  const s = await createFreshBrowser(baseSessionId, true);
+  await applyCookiesToPage(s.page, cookies);
+  await s.page.goto('https://naver.com', { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const applied = await s.page.cookies('https://naver.com');
+  if (!applied.some(c => c.name === 'NID_AUT' || c.name === 'NID_SES')) {
+    throw new Error('쿠키 적용에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+  s.cookies = applied;
+  s.loggedIn = true;
+  if (placeId) s.placeId = placeId;
+  return s;
 }
 
 
@@ -684,41 +634,6 @@ async function analyzeOwnerStyle(page, placeId) {
 // ══════════════════════════════════════════════════════════════════════════
 
 function smartStoreSessionId(sessionId) { return `${sessionId}:smartstore`; }
-
-// ── 팝업창 로그인 (스마트플레이스용 naverLoginWithPopup과 동일한 방식, URL만 다름) ──
-async function smartStoreLoginWithPopup(sessionId) {
-  const ssId = smartStoreSessionId(sessionId);
-
-  const visible = await createFreshBrowser(`${ssId}_visible`, false);
-  const { browser: visibleBrowser, page: p2 } = visible;
-  await p2.goto('https://accounts.commerce.naver.com/login', {
-    waitUntil: 'domcontentloaded', timeout: 30000
-  });
-  try { await p2.bringToFront(); } catch (e) {}
-
-  const cookies = await waitForNaverLogin(p2);
-  console.log('✅ 네이버(스마트스토어) 로그인 감지! 쿠키 추출 완료');
-
-  const headless = await createFreshBrowser(ssId, true);
-  const { page: headlessPage } = headless;
-  await applyCookiesToPage(headlessPage, cookies);
-
-  await headlessPage.goto('https://naver.com', { waitUntil: 'domcontentloaded', timeout: 20000 });
-  const copiedCookies = await headlessPage.cookies('https://naver.com');
-  const copiedLoggedIn = copiedCookies.some(c => c.name === 'NID_AUT' || c.name === 'NID_SES');
-  if (!copiedLoggedIn) throw new Error('headless 세션 로그인 검증 실패');
-
-  headless.cookies = copiedCookies;
-  headless.loggedIn = true;
-
-  await headlessPage.goto('https://sell.smartstore.naver.com/#/review/search', {
-    waitUntil: 'domcontentloaded', timeout: 30000
-  });
-  console.log('✅ 스마트스토어 리뷰관리 이동 완료!');
-
-  await visibleBrowser.close().catch(() => {});
-  return { success: true };
-}
 
 // ── 화면에 보이는 리뷰 목록 읽기 (AG-Grid 표 구조) ──────────────────────────
 // 선택자는 판매자센터 리뷰관리 화면의 실제 구조에 맞춘 것으로, 네이버가 화면
@@ -973,23 +888,71 @@ app.get('/api/naver-login-url', requireAuth, async (req, res) => {
 });
 
 
-// 팝업 로그인 시작
-app.post("/api/naver-open-login", requireAuth, async (req, res) => {
+// ── 크롬 확장프로그램 연동 ────────────────────────────────────────────────
+// 1) 대시보드에서 연동 코드 발급 (스마트플레이스 / 스마트스토어 공통)
+app.post('/api/connect-code', requireAuth, async (req, res) => {
   try {
-    const { placeId } = req.body;
-    const sessionId = req.session.id;
-    const vncToken = acquireVisibleLoginLock(sessionId);
-    if (!vncToken) {
-      return res.json({ success: false, error: '지금 다른 사용자가 로그인 화면을 사용 중이에요. 잠시 후 다시 시도해주세요.' });
+    const type = (req.body && req.body.type) === 'smartstore' ? 'smartstore' : 'smartplace';
+    const placeId = (req.body && req.body.placeId && String(req.body.placeId).trim()) || req.user.placeId || null;
+    if (type === 'smartplace' && placeId && placeId !== req.user.placeId) {
+      req.user.placeId = placeId;
+      db.users.set(req.user.userId, req.user);
+      await saveDB();
     }
-    if (placeId) { req.user.placeId = placeId; db.users.set(req.user.userId, req.user); await saveDB(); }
-    res.json({ success: true, message: "로그인 창이 열렸습니다", vncToken });
-    naverLoginWithPopup(sessionId, req.user.placeId || placeId)
-      .catch(err => console.error('네이버 로그인 오류:', err.message))
-      .finally(() => releaseVisibleLoginLock(sessionId));
-  } catch(e) {
-    releaseVisibleLoginLock(req.session.id);
-    res.json({ success: false, error: e.message });
+    const code = makeConnectCode();
+    connectCodes.set(code, {
+      userId: req.user.userId,
+      sessionId: req.session.id,
+      type,
+      placeId,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+    res.json({ code, type, expiresInSec: 600 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 2) 확장프로그램이 네이버 쿠키 전달 → 해당 회원의 headless 세션에 주입
+//    (인증은 1회용 연동 코드로만 한다. 대시보드 세션 쿠키가 필요 없음)
+app.post('/api/extension/connect', async (req, res) => {
+  try {
+    const { code, cookies } = req.body || {};
+    if (!code || !Array.isArray(cookies) || !cookies.length) {
+      return res.status(400).json({ success: false, error: '요청 형식이 올바르지 않습니다.' });
+    }
+    const key = String(code).trim().toUpperCase();
+    const entry = connectCodes.get(key);
+    if (!entry || entry.expiresAt < Date.now()) {
+      connectCodes.delete(key);
+      return res.status(400).json({ success: false, error: '연동 코드가 만료됐거나 올바르지 않습니다. 리뷰메이트에서 새 코드를 발급받아 주세요.' });
+    }
+    if (!cookies.some(c => c && (c.name === 'NID_AUT' || c.name === 'NID_SES'))) {
+      return res.status(400).json({ success: false, error: '네이버 로그인 정보가 없습니다. 네이버에 먼저 로그인한 뒤 다시 시도해 주세요.' });
+    }
+    const user = db.users.get(entry.userId);
+    if (!user) return res.status(400).json({ success: false, error: '회원 정보를 찾을 수 없습니다. 리뷰메이트에 다시 로그인해 주세요.' });
+
+    const baseId = entry.type === 'smartstore'
+      ? smartStoreSessionId(entry.sessionId)
+      : entry.sessionId;
+
+    const s = await applyNaverCookiesToSession(baseId, cookies, { placeId: entry.placeId });
+
+    if (entry.type === 'smartstore') {
+      user.smartStoreConnected = true;
+    } else {
+      user.naverConnected = true;
+      if (entry.placeId) user.placeId = entry.placeId;
+    }
+    db.users.set(user.userId, user);
+    await saveDB();
+    connectCodes.delete(key);
+
+    res.json({ success: true, type: entry.type });
+  } catch (err) {
+    console.error('확장 연동 오류:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 // 프론트에서 로그인 완료 후 쿠키 전달
@@ -1033,53 +996,20 @@ app.post('/api/naver-cookie', requireAuth, async (req, res) => {
   }
 });
 
-// 네이버 팝업 로그인 시작
+// (구버전) 네이버 팝업 로그인 — 이제 크롬 확장프로그램 연동으로 대체됨
 app.post('/api/login', async (req, res) => {
   const { placeId } = req.body;
-  if (!placeId) return res.status(400).json({ error: '플레이스 ID를 입력해주세요.' });
-
-  try {
-    const sessionId = req.session.id;
-
-    // 기존 브라우저 세션 정리
-    const existing = db.browserSessions.get(sessionId);
-    if (existing) {
-      await existing.browser.close().catch(() => {});
-      db.browserSessions.delete(sessionId);
-    }
-
-    // 유저 찾기 (세션 or 전체 DB에서)
-    let user = req.user;
-    if (!user && req.session && req.session.userId) {
-      user = db.users.get(req.session.userId);
-    }
-    // 유저 없어도 placeId는 세션에 임시 저장
-    if (!user) {
-      req.session.tempPlaceId = placeId;
-    } else {
+  if (placeId && req.session && req.session.userId) {
+    const user = db.users.get(req.session.userId);
+    if (user) {
       user.placeId = placeId;
       db.users.set(user.userId, user);
       await saveDB();
     }
-
-    // Puppeteer 창 열기 (비동기)
-    naverLoginWithPopup(sessionId, placeId)
-      .then(async () => {
-        // 로그인 성공 시 user 다시 찾아서 저장
-        const u = user || (req.session.userId ? db.users.get(req.session.userId) : null);
-        if (u) {
-          u.naverConnected = true;
-          u.placeId = placeId;
-          db.users.set(u.userId, u);
-          await saveDB();
-        }
-      })
-      .catch(err => console.error('로그인 오류:', err.message));
-
-    res.json({ success: true, message: '네이버 로그인 창이 열렸습니다. 직접 로그인해주세요.' });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
   }
+  res.status(410).json({
+    error: '이제 네이버 연동은 크롬 확장프로그램으로 진행합니다. 대시보드의 "네이버 계정 연동"에서 연동 코드를 발급받아 주세요.'
+  });
 });
 
 // 로그인 상태 확인
@@ -1278,27 +1208,13 @@ app.post('/api/reply', requireAuth, async (req, res) => {
 // 스마트스토어 리뷰 자동화 API
 // ══════════════════════════════════════════════════════════════════════════
 
-// 스마트스토어 네이버 로그인 팝업 열기
-app.post('/api/smartstore/open-login', requireAuth, async (req, res) => {
-  try {
-    const sessionId = req.session.id;
-    const vncToken = acquireVisibleLoginLock(sessionId);
-    if (!vncToken) {
-      return res.json({ success: false, error: '지금 다른 사용자가 로그인 화면을 사용 중이에요. 잠시 후 다시 시도해주세요.' });
-    }
-    res.json({ success: true, message: '네이버 로그인 창이 열렸습니다.', vncToken });
-    smartStoreLoginWithPopup(sessionId)
-      .then(async () => {
-        req.user.smartStoreConnected = true;
-        db.users.set(req.user.userId, req.user);
-        await saveDB();
-      })
-      .catch(err => console.error('스마트스토어 로그인 오류:', err.message))
-      .finally(() => releaseVisibleLoginLock(sessionId));
-  } catch(e) {
-    releaseVisibleLoginLock(req.session.id);
-    res.json({ success: false, error: e.message });
-  }
+// 스마트스토어 네이버 연동 — 크롬 확장프로그램 연동으로 대체됨
+// (연동 코드 발급은 /api/connect-code 에서 type: 'smartstore' 로 처리)
+app.post('/api/smartstore/open-login', requireAuth, (req, res) => {
+  res.status(410).json({
+    success: false,
+    error: '이제 스마트스토어 연동은 크롬 확장프로그램으로 진행합니다. 아래 "연동 코드 발급"을 눌러주세요.'
+  });
 });
 
 // 로그인 상태 확인
@@ -1587,36 +1503,6 @@ app.get('/dashboard.html', requireAuth, (req, res) => {
 // health check
 app.get('/api/health', (req, res) => res.json({ok:true, ts: Date.now()}));
 
-// ── 네이버 로그인 화면공유(VNC) 웹소켓 프록시 ────────────────────────────
-// 브라우저는 raw VNC 프로토콜을 못 쓰므로, 로컬 websockify(포트 6080)로
-// 들어오는 웹소켓 연결을 그대로 이어준다. /vnc?token=... 형태로만 접속 허용.
-const httpServer = http.createServer(app);
-
-httpServer.on('upgrade', (req, socket, head) => {
-  let pathname = '', token = '';
-  try {
-    const parsed = new URL(req.url, 'http://localhost');
-    pathname = parsed.pathname;
-    token = parsed.searchParams.get('token') || '';
-  } catch (e) { socket.destroy(); return; }
-
-  if (pathname !== '/vnc') { socket.destroy(); return; }
-  if (!isValidVncToken(token)) {
-    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-    socket.destroy();
-    return;
-  }
-
-  const target = net.connect(6080, '127.0.0.1', () => {
-    const headerLines = Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n');
-    target.write(`GET / HTTP/1.1\r\n${headerLines}\r\n\r\n`);
-    if (head && head.length) target.write(head);
-    socket.pipe(target).pipe(socket);
-  });
-  target.on('error', () => socket.destroy());
-  socket.on('error', () => target.destroy());
-});
-
 (async () => {
   try {
     db = await loadDB();
@@ -1625,7 +1511,7 @@ httpServer.on('upgrade', (req, socket, head) => {
     console.error('❌ Postgres 연결 실패:', e.message);
     process.exit(1);
   }
-  httpServer.listen(process.env.PORT||3001, () => console.log('✅ 리뷰메이트 서버 실행 중: http://localhost:3001'));
+  app.listen(process.env.PORT||3001, () => console.log('✅ 리뷰메이트 서버 실행 중: http://localhost:3001'));
 })();
 
 

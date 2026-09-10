@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "리뷰메이트 네이버 연동",
+  "version": "1.0.0",
+  "description": "네이버 로그인 상태를 리뷰메이트에 안전하게 연결합니다. (연동 코드 입력 방식)",
+  "permissions": ["cookies"],
+  "host_permissions": [
+    "https://*.naver.com/",
+    "https://reviewmate-kdyl.onrender.com/"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "리뷰메이트 네이버 연동"
+  }
+}

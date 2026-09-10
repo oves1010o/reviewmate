@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    width: 320px;
+    margin: 0;
+    padding: 16px;
+    font-family: -apple-system, "Malgun Gothic", sans-serif;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #777; margin: 0 0 14px; line-height: 1.5; }
+  .label { font-size: 12px; font-weight: 600; margin: 12px 0 6px; }
+  .types { display: flex; gap: 8px; }
+  .types label {
+    flex: 1; text-align: center; font-size: 12px;
+    padding: 8px 4px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer;
+  }
+  .types input { display: none; }
+  .types input:checked + span { font-weight: 700; color: #03c75a; }
+  .types label:has(input:checked) { border-color: #03c75a; background: #f0fff6; }
+  input[type="text"] {
+    width: 100%; padding: 10px; font-size: 16px; letter-spacing: 3px;
+    text-align: center; text-transform: uppercase;
+    border: 1px solid #ccc; border-radius: 8px;
+  }
+  button {
+    width: 100%; margin-top: 12px; padding: 11px;
+    font-size: 14px; font-weight: 700; color: #fff; background: #03c75a;
+    border: none; border-radius: 8px; cursor: pointer;
+  }
+  button:disabled { background: #9bd9b5; cursor: default; }
+  .status {
+    margin-top: 12px; font-size: 12px; line-height: 1.5;
+    padding: 9px 10px; border-radius: 8px; background: #f4f4f5; color: #555;
+    white-space: pre-wrap;
+  }
+  .status.ok { background: #eafaf0; color: #1a7a3a; }
+  .status.err { background: #fdecec; color: #b42318; }
+  .help { margin-top: 14px; font-size: 11px; color: #999; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>리뷰메이트 네이버 연동</h1>
+  <p class="sub">이 브라우저에 로그인된 네이버 계정을 리뷰메이트에 연결합니다.</p>
+
+  <div class="label">무엇을 연동하나요?</div>
+  <div class="types">
+    <label><input type="radio" name="type" value="smartplace" checked><span>스마트플레이스</span></label>
+    <label><input type="radio" name="type" value="smartstore"><span>스마트스토어</span></label>
+  </div>
+
+  <div class="label">연동 코드 (리뷰메이트에서 발급)</div>
+  <input type="text" id="code" maxlength="6" placeholder="******" autocomplete="off" />
+
+  <button id="go">연동하기</button>
+  <div class="status" id="status">리뷰메이트 대시보드 → 네이버 계정 연동에서 코드를 발급받아 입력하세요.</div>
+
+  <div class="help">
+    ※ 연동 전에 이 브라우저에서 <b>naver.com에 로그인</b>되어 있어야 합니다.<br>
+    ※ 코드는 발급 후 10분간만 유효합니다.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

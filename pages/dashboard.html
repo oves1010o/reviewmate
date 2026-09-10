@@ -339,11 +339,11 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
       <div class="settings-card" id="storeConnectBanner">
         <div class="settings-title" style="margin:0 0 10px;padding:0;border:none">🛒 스마트스토어 연동</div>
         <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
-          버튼을 누르면 네이버 로그인 창이 열립니다. 직접 로그인하시면 상품 리뷰를 자동으로 불러올 수 있어요.
+          <b>크롬 확장프로그램</b>으로 연동합니다. ① 크롬에서 naver.com 로그인 → ② 아래 코드 발급 → ③ 확장프로그램에서 "스마트스토어" 선택 후 코드 입력
         </p>
         <div id="storeConnectResult" style="display:none;padding:10px 12px;border-radius:8px;font-size:.85rem;margin-bottom:10px"></div>
-        <button class="btn-sm btn-green" id="storeConnectBtn" onclick="connectSmartStore()" style="padding:10px 16px">🔐 네이버 로그인 창 열기</button>
-        <button class="btn-sm btn-ghost" id="storeConfirmBtn" onclick="confirmSmartStoreLogin()" style="padding:10px 16px;display:none;margin-left:8px">✅ 로그인 완료 확인</button>
+        <button class="btn-sm btn-green" id="storeConnectBtn" onclick="connectSmartStore()" style="padding:10px 16px">🔗 연동 코드 발급</button>
+        <button class="btn-sm btn-ghost" id="storeConfirmBtn" onclick="confirmSmartStoreLogin()" style="padding:10px 16px;display:none;margin-left:8px">✅ 연동 완료 확인</button>
       </div>
 
       <div class="settings-card">
@@ -426,8 +426,8 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
       <div class="settings-card">
         <div class="settings-title">네이버 계정 연동</div>
         <p style="font-size:.82rem;color:var(--muted);margin-bottom:1.2rem;line-height:1.7;">
-          버튼을 클릭하면 네이버 로그인 창이 자동으로 열립니다.<br>
-          직접 로그인하시면 자동으로 연동됩니다. (CAPTCHA, 2단계 인증 모두 가능)
+          네이버는 리뷰 자동화 공식 API가 없어, <b>크롬 확장프로그램</b>으로 네이버 로그인 상태를 연결합니다.<br>
+          ① 크롬에서 naver.com 로그인 → ② 아래 코드 발급 → ③ 확장프로그램에 코드 입력
         </p>
         <div class="form-row">
           <label>스마트플레이스 ID</label>
@@ -435,16 +435,12 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
           <div style="font-size:.72rem;color:var(--muted);margin-top:4px">네이버 지도 URL: map.naver.com/...place/<b>이 숫자</b></div>
         </div>
         <button class="btn-sm btn-green" id="connectBtn" onclick="connectNaver()" style="width:100%;padding:12px;margin-bottom:8px">
-          🔐 네이버 로그인 창 열기
+          🔗 연동 코드 발급
         </button>
         <button class="btn-sm btn-ghost" id="confirmLoginBtn" onclick="confirmNaverLogin()" style="width:100%;padding:10px;display:none">
-          ✅ 로그인 완료 확인
+          ✅ 연동 완료 확인
         </button>
         <div id="connectResult" style="font-size:.82rem;margin-top:.8rem;display:none;padding:.8rem;border-radius:8px;line-height:1.6;"></div>
-        <div id="loginStatusWrap" style="display:none;margin-top:.8rem;">
-          <div style="font-size:.78rem;color:var(--muted);">로그인 창에서 네이버 로그인 후 이 버튼을 누르세요:</div>
-          <button class="btn-sm btn-ghost" onclick="checkLoginStatus()" style="width:100%;padding:10px;margin-top:.5rem;">✅ 로그인 완료 확인</button>
-        </div>
       </div>
     </div>
 
@@ -805,27 +801,42 @@ async function saveStoreConfig() {
   // 조용히 저장 (alert 없음)
 }
 
+function renderConnectCodeBox(r, code, typeLabel) {
+  r.style.display = "block";
+  r.style.background = "#eef7ff";
+  r.style.color = "#0b5fa8";
+  r.style.border = "1px solid #b6d8f5";
+  r.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px">확장프로그램에 아래 코드를 입력하세요</div>
+    <div style="font-size:1.6rem;font-weight:800;letter-spacing:5px;text-align:center;margin:8px 0">${code}</div>
+    <ol style="margin:6px 0 0 1rem;padding:0;font-size:.8rem;line-height:1.8">
+      <li>크롬에서 <b>naver.com에 로그인</b>되어 있는지 확인</li>
+      <li>리뷰메이트 확장프로그램 아이콘 클릭</li>
+      <li>"${typeLabel}" 선택 → 위 코드 입력 → 연동하기</li>
+      <li>완료되면 아래 <b>연동 완료 확인</b> 클릭</li>
+    </ol>
+    <div style="font-size:.72rem;color:#7a5000;margin-top:6px">코드는 10분간 유효합니다.</div>`;
+}
+
 async function connectNaver() {
   const btn=document.getElementById("connectBtn");
   const r=document.getElementById("connectResult");
   btn.disabled=true;
-  btn.innerHTML="연결 중...";
+  btn.innerHTML="발급 중...";
   try {
-    const res=await fetch("/api/naver-open-login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({placeId:document.getElementById("cfgPlaceId")?.value.trim()||""}),credentials:"include"});
+    const placeId=document.getElementById("cfgPlaceId")?.value.trim()||"";
+    const res=await fetch("/api/connect-code",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({type:"smartplace",placeId})});
     const data=await res.json();
-    if(data.success){
-      r.style.display="block";
-      r.innerHTML="네이버 로그인 창이 열렸습니다! 아래 화면에서 직접 로그인해주세요.";
-      document.getElementById("loginStatusWrap").style.display="block";
+    if(res.ok && data.code){
+      renderConnectCodeBox(r, data.code, "스마트플레이스");
       document.getElementById("confirmLoginBtn").style.display="block";
-      if (data.vncToken) openVncViewer(data.vncToken);
     } else {
       r.style.display="block";
-      r.textContent = "오류: " + (data.error || "알 수 없는 오류");
+      r.textContent = "오류: " + (data.error || "코드 발급에 실패했습니다.");
     }
-  }catch(e){r.style.display="block";r.textContent="오류:"+e.message;}
+  }catch(e){r.style.display="block";r.textContent="오류: "+e.message;}
   btn.disabled=false;
-  btn.innerHTML="🔐 네이버 로그인 창 열기";
+  btn.innerHTML="🔗 연동 코드 발급";
 }
 
 function showConnected(r) {
@@ -844,29 +855,28 @@ async function confirmNaverLogin() {
   btn.disabled=true;
   btn.innerHTML="확인 중...";
   try {
-    const res=await fetch("/api/naver-cookie",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+    const res=await fetch("/api/login/status",{credentials:"include"});
     const data=await res.json();
-    if(res.ok && data.success){
+    if(data.loggedIn){
       r.style.display="block";
       r.style.background="#f0fff4";
       r.style.color="#1a7a3a";
       r.style.border="1px solid #6fcf97";
       r.innerHTML="✓ 네이버 연결 완료!";
-      document.getElementById("loginStatusWrap").style.display="none";
-      closeVncViewer();
+      btn.style.display="none";
       loadReviews();
     } else {
       r.style.display="block";
       r.style.background="#fff8e0";
       r.style.color="#7a5000";
-      r.innerHTML="⚠ " + (data.error||"아직 로그인이 감지되지 않았습니다. 로그인 창에서 로그인 후 다시 눌러주세요.");
+      r.innerHTML="⚠ 아직 연동이 감지되지 않았어요. 확장프로그램에서 연동을 마친 뒤 다시 눌러주세요.";
     }
   }catch(e){
     r.style.display="block";
     r.textContent="오류: "+e.message;
   }
   btn.disabled=false;
-  btn.innerHTML="✅ 로그인 완료 확인";
+  btn.innerHTML="✅ 연동 완료 확인";
 }
 
 // ── 스마트스토어 ──────────────────────────────────────────────────────────
@@ -876,22 +886,23 @@ async function connectSmartStore() {
   const btn = document.getElementById('storeConnectBtn');
   const r = document.getElementById('storeConnectResult');
   btn.disabled = true;
-  btn.innerHTML = '연결 중...';
+  btn.innerHTML = '발급 중...';
   try {
-    const res = await fetch(`${API}/smartstore/open-login`, { method: 'POST', credentials: 'include' });
+    const res = await fetch(`${API}/connect-code`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'smartstore' })
+    });
     const data = await res.json();
-    if (data.success) {
-      r.style.display = 'block';
-      r.style.background = '#eef7ff'; r.style.color = '#0b5fa8';
-      r.innerHTML = '네이버 로그인 창이 열렸습니다! 아래 화면에서 직접 로그인해주세요.';
+    if (res.ok && data.code) {
+      renderConnectCodeBox(r, data.code, "스마트스토어");
       document.getElementById('storeConfirmBtn').style.display = 'inline-flex';
-      if (data.vncToken) openVncViewer(data.vncToken);
     } else {
-      r.style.display = 'block'; r.textContent = '오류: ' + (data.error || '알 수 없는 오류');
+      r.style.display = 'block'; r.textContent = '오류: ' + (data.error || '코드 발급에 실패했습니다.');
     }
   } catch(e) { r.style.display = 'block'; r.textContent = '오류: ' + e.message; }
   btn.disabled = false;
-  btn.innerHTML = '🔐 네이버 로그인 창 열기';
+  btn.innerHTML = '🔗 연동 코드 발급';
 }
 
 async function confirmSmartStoreLogin() {
@@ -905,11 +916,10 @@ async function confirmSmartStoreLogin() {
       r.style.background = '#f0fff4'; r.style.color = '#1a7a3a';
       r.innerHTML = '✓ 스마트스토어 연결 완료!';
       btn.style.display = 'none';
-      closeVncViewer();
       loadStoreReviews();
     } else {
       r.style.background = '#fff8e0'; r.style.color = '#7a5000';
-      r.innerHTML = '⚠ 아직 로그인이 감지되지 않았어요. 로그인 창에서 로그인 후 다시 눌러주세요.';
+      r.innerHTML = '⚠ 아직 연동이 감지되지 않았어요. 확장프로그램에서 연동을 마친 뒤 다시 눌러주세요.';
     }
   } catch(e) { r.textContent = '오류: ' + e.message; }
   btn.disabled = false; btn.innerHTML = '✅ 로그인 완료 확인';
@@ -1051,10 +1061,10 @@ async function checkLoginStatus() {
     r.style.color = 'var(--green-dark)';
     r.style.border = '1px solid var(--green)';
     r.textContent = '✓ 네이버 연결 완료! 리뷰를 자동으로 불러올 수 있습니다.';
-    document.getElementById('loginStatusWrap').style.display = 'none';
-    document.getElementById('connectBanner').style.display = 'none';
-    document.getElementById('statusDot').classList.add('online');
-    document.getElementById('statusText').textContent = '네이버 연결됨';
+    document.getElementById('loginStatusWrap')?.style && (document.getElementById('loginStatusWrap').style.display = 'none');
+    document.getElementById('connectBanner')?.style && (document.getElementById('connectBanner').style.display = 'none');
+    document.getElementById('statusDot')?.classList.add('online');
+    const _st = document.getElementById('statusText'); if (_st) _st.textContent = '네이버 연결됨';
     loadReviews();
   } else {
     r.style.background = '#fff8e0';
@@ -1214,46 +1224,7 @@ function copyCSReply() {
   });
 }
 
-// ── 네이버 로그인 화면공유(VNC) 뷰어 ──────────────────────────────────────
-let vncRfb = null;
-
-async function openVncViewer(token) {
-  const modal = document.getElementById('vncModal');
-  const screenEl = document.getElementById('vncScreen');
-  modal.style.display = 'flex';
-  screenEl.textContent = '화면 연결 중...';
-  try {
-    const mod = await import('https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js');
-    const RFB = mod.default;
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/vnc?token=${encodeURIComponent(token)}`;
-    screenEl.innerHTML = '';
-    vncRfb = new RFB(screenEl, url);
-    vncRfb.scaleViewport = true;
-    vncRfb.addEventListener('disconnect', () => {
-      screenEl.textContent = '화면 연결이 종료됐습니다.';
-    });
-  } catch(e) {
-    screenEl.textContent = '화면을 불러오지 못했습니다: ' + e.message;
-  }
-}
-
-function closeVncViewer() {
-  const modal = document.getElementById('vncModal');
-  if (modal) modal.style.display = 'none';
-  if (vncRfb) { try { vncRfb.disconnect(); } catch(e) {} vncRfb = null; }
-}
 </script>
-
-<div id="vncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#1e1e1e;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);max-width:94vw;max-height:94vh;">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#2a2a2a;color:#fff;font-size:.85rem;">
-      <span>🔐 네이버 로그인</span>
-      <button onclick="closeVncViewer()" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
-    </div>
-    <div id="vncScreen" style="width:520px;max-width:90vw;height:650px;max-height:80vh;background:#000;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:.85rem;"></div>
-  </div>
-</div>
 
   </body>
 </html>
