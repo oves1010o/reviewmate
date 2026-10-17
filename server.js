@@ -32,6 +32,17 @@ function extractText(response) {
   return block ? block.text.trim() : '';
 }
 
+// Claude가 생각하는 데 글자 수를 다 써서 답이 비어 오는 경우가 간헐적으로 있어,
+// 한도를 넉넉히 주고(최소 1500) 비어 있으면 한 번 더 시도한다.
+async function claudeText(params) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await anthropic.messages.create({ ...params, max_tokens: Math.max(params.max_tokens || 0, 1500) });
+    const text = extractText(response);
+    if (text) return text;
+  }
+  return '';
+}
+
 // ── 단일 플랜 설정 ────────────────────────────────────────────────────────
 const PLAN = {
   name: '리뷰메이트 월정액',
@@ -798,11 +809,10 @@ ${insight ? `[이 상품의 실제 셀링포인트 — 답변에 자연스럽게
 - 이모지는 최대 1개
 - 답변 텍스트만 출력 (설명 없이)`;
 
-  const response = await anthropic.messages.create({
+  return claudeText({
     model: 'claude-sonnet-5', max_tokens: 400,
     messages: [{ role: 'user', content: prompt }]
   });
-  return extractText(response);
 }
 
 // ── 상품 상세페이지 이미지를 분석해서 셀링포인트 추출 (Claude Vision) ──────
@@ -830,7 +840,7 @@ async function analyzeProductDetail(page, productUrl) {
   }
   if (!imageBlocks.length) throw new Error('상세페이지 이미지를 불러오지 못했습니다.');
 
-  const response = await anthropic.messages.create({
+  return claudeText({
     model: 'claude-sonnet-5', max_tokens: 500,
     messages: [{
       role: 'user',
@@ -840,7 +850,6 @@ async function analyzeProductDetail(page, productUrl) {
       ]
     }]
   });
-  return extractText(response);
 }
 
 async function generateAIReply(user, reviewText, existingReplies = []) {
@@ -895,11 +904,10 @@ ${user.emphasis ? `브랜드 강조 포인트: ${user.emphasis}` : ''}
 - 사장님과 고객 사이의 적절한 예의를 유지할 것
 - 답변 맨 마지막 줄에 사용한 SEO 키워드를 #키워드 형태로 1~2개 자연스럽게 추가 (예: #부산역밀면 #부산맛집)`;
 
-  const response = await anthropic.messages.create({
+  return claudeText({
     model: 'claude-sonnet-5', max_tokens: 500,
     messages: [{ role: 'user', content: prompt }]
   });
-  return extractText(response);
 }
 
 // SEO 키워드 AI 자동 추출
@@ -919,11 +927,10 @@ async function extractSEOKeywords(user) {
 JSON 배열로만 답변: ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"]`;
 
   try {
-    const response = await anthropic.messages.create({
+    let text = await claudeText({
       model: 'claude-sonnet-5', max_tokens: 500,
       messages: [{ role: 'user', content: prompt }]
     });
-    let text = extractText(response);
     const match = text.match(/\[[\s\S]*\]/); // 혹시 앞뒤에 다른 텍스트가 붙어도 배열 부분만 추출
     if (match) text = match[0];
     const keywords = JSON.parse(text);
@@ -1739,12 +1746,11 @@ app.post('/api/cs-chat', async (req, res) => {
 고객 문의: "${message}"`;
 
     console.log('[cs-chat] calling anthropic...');
-    const response = await anthropic.messages.create({
+    const reply = await claudeText({
       model: 'claude-sonnet-5', max_tokens: 300,
       messages: [{ role: 'user', content: csPrompt }]
     });
     console.log('[cs-chat] done');
-    const reply = extractText(response);
     if (!reply) return res.status(502).json({ error: 'AI 응답이 비어있습니다.' });
     return res.json({ reply });
   } catch(err) {
@@ -1788,12 +1794,11 @@ app.post('/api/cs-helper', requireAuth, async (req, res) => {
 - 재방문 유도로 마무리
 - 150자 내외, 답변 텍스트만 출력`;
 
-    const response = await anthropic.messages.create({
+    const reply = await claudeText({
       model: 'claude-sonnet-5', max_tokens: 400,
       messages: [{ role: 'user', content: csPrompt }]
     });
 
-    const reply = extractText(response);
     if (!reply) return res.status(502).json({ error: 'AI 응답이 비어있습니다.' });
     return res.json({ reply });
   } catch(err) {
