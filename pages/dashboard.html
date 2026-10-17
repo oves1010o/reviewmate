@@ -231,6 +231,9 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
     <a class="nav-item" onclick="showScreen('storeReviews')">
       <span class="icon">🛒</span> 스마트스토어 리뷰관리
     </a>
+    <a class="nav-item" onclick="showScreen('download')">
+      <span class="icon">💻</span> 프로그램 다운로드
+    </a>
     <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)">
       <a class="nav-item" onclick="showScreen('settings')">
         <span class="icon">⚙️</span> 매장 설정
@@ -371,6 +374,39 @@ input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(3,1
     </div>
 
     <!-- 설정 화면 -->
+    <!-- 프로그램 다운로드 화면 -->
+    <div class="screen" id="screenDownload">
+      <div class="settings-card">
+        <div class="settings-title" style="margin:0 0 10px;padding:0;border:none">💻 리뷰메이트 프로그램</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.1rem;line-height:1.7">
+          네이버 로그인과 리뷰 불러오기, 답글 등록은 <b>내 PC에 설치한 프로그램</b>에서 진행해요.<br>
+          네이버 로그인 정보는 내 PC에만 저장되고 리뷰메이트 서버로 전송되지 않아요.
+        </p>
+        <a class="btn-sm btn-green" href="/download" style="display:inline-block;padding:12px 22px;text-decoration:none">⬇️ Windows용 다운로드</a>
+        <div style="font-size:.74rem;color:var(--muted);margin-top:8px">Windows 10 / 11 · 약 110MB</div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-title" style="margin:0 0 10px;padding:0;border:none">사용 방법</div>
+        <ol style="margin:0 0 0 1.1rem;padding:0;font-size:.85rem;line-height:2">
+          <li>위 버튼으로 프로그램을 내려받아 <b>설치</b>합니다.</li>
+          <li>실행해서 <b>리뷰메이트 가입 계정</b>(이메일/비밀번호)으로 로그인합니다.</li>
+          <li><b>네이버 로그인</b> 버튼을 누르고, 열린 창에서 로그인합니다. (처음 한 번만)</li>
+          <li><b>리뷰 불러오기</b> → <b>AI 답글 생성</b> → 내용 확인 후 <b>네이버에 등록</b>합니다.</li>
+          <li>토큰이 부족하면 이 사이트의 <a href="charge.html" style="color:var(--green)">토큰 충전</a>에서 충전해요.</li>
+        </ol>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-title" style="margin:0 0 10px;padding:0;border:none">설치할 때 파란 경고 화면이 뜨면</div>
+        <p style="font-size:.84rem;color:var(--muted);line-height:1.8;margin:0">
+          "Windows의 PC 보호" 화면이 나오면 <b>추가 정보</b>를 누른 뒤 <b>실행</b>을 눌러주세요.<br>
+          아직 널리 배포되지 않은 새 프로그램이라 나오는 안내이며, 계속 진행해도 괜찮아요.<br>
+          설치나 사용 중 문제가 생기면 왼쪽 <b>관리자에게 문의하기</b>로 알려주세요.
+        </p>
+      </div>
+    </div>
+
     <div class="screen" id="screenSettings">
       <div class="settings-card">
         <div class="settings-title">매장 정보</div>
@@ -1081,7 +1117,7 @@ function showScreen(name) {
   if (typeof event !== 'undefined' && event?.currentTarget?.classList?.contains('nav-item')) {
     event.currentTarget.classList.add('active');
   }
-  const titles = {dashboard:'대시보드',reviews:'스마트플레이스 리뷰관리',storeReviews:'스마트스토어 리뷰관리',settings:'매장 설정',cs:'불만리뷰 관리'};
+  const titles = {dashboard:'대시보드',reviews:'스마트플레이스 리뷰관리',storeReviews:'스마트스토어 리뷰관리',download:'프로그램 다운로드',settings:'매장 설정',cs:'불만리뷰 관리'};
   document.getElementById('topbarTitle').textContent = titles[name] || '';
   if (name === 'storeReviews') checkSmartStoreStatus();
 }

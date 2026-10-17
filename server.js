@@ -1583,6 +1583,22 @@ app.get('/dashboard.html', requireAuth, (req, res) => {
 });
 
 
+// 프로그램(설치 파일) 다운로드 — 보관 위치가 바뀌어도 이 주소는 그대로 쓰도록 한 번 거쳐서 보냄.
+// 기본값은 GitHub Releases 최신 버전. 다른 곳에 올리면 환경변수 DOWNLOAD_URL로 바꾼다.
+const DOWNLOAD_URL = process.env.DOWNLOAD_URL || 'https://github.com/oves1010o/reviewmate/releases/latest/download/ReviewMate-Setup.exe';
+app.get('/download', async (req, res) => {
+  try {
+    const head = await fetch(DOWNLOAD_URL, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    if (head.ok) return res.redirect(302, DOWNLOAD_URL);
+  } catch (e) { /* 아래 안내 페이지로 */ }
+  res.status(503).type('html').send(
+    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>프로그램 준비 중</title><body style="font-family:sans-serif;max-width:420px;margin:15vh auto;padding:0 20px;line-height:1.7">' +
+    '<h2>프로그램을 준비하고 있어요</h2><p>다운로드 파일이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.<br>급하시면 대시보드의 <b>관리자에게 문의하기</b>로 알려주세요.</p>' +
+    '<p><a href="/dashboard.html">대시보드로 돌아가기</a></p>'
+  );
+});
+
 // health check
 // 서버 프로세스가 떠 있으면 ok:true, DB 상태는 db 필드로 따로 알려줌 (접속정보는 노출하지 않고 오류 종류만)
 app.get('/api/health', (req, res) => res.json({

@@ -24,7 +24,8 @@
     },
     "nsis": {
       "oneClick": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "ReviewMate-Setup.${ext}"
     }
   },
   "devDependencies": {
