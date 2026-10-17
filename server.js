@@ -17,6 +17,13 @@ app.use(session({
   cookie: { secure: false, maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
+// DB 연결 상태 — DB가 안 되어도 서버는 떠 있고(계속 재시도), /api/health 로 원인을 확인할 수 있다
+const dbStatus = { ok: false, error: 'starting' };
+app.use('/api', (req, res, next) => {
+  if (dbStatus.ok || req.path === '/health') return next();
+  res.status(503).json({ error: '서버가 준비 중입니다. 잠시 후 다시 시도해주세요.' });
+});
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Claude 응답에 'thinking' 블록이 먼저 올 수 있어 항상 첫 text 블록을 찾음
@@ -38,13 +45,13 @@ const DB_FILE = path.join(__dirname, 'db.json'); // 구버전 데이터 1회 마
 const { Pool } = require('pg');
 
 if (!process.env.DATABASE_URL) {
-  console.error('❌ DATABASE_URL 환경변수가 설정되지 않았습니다. Render Postgres 연결 문자열을 .env에 추가하세요.');
-  process.exit(1);
+  console.error('❌ DATABASE_URL 환경변수가 설정되지 않았습니다. Render Postgres 연결 문자열을 환경변수에 추가하세요.');
 }
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 15000 // 연결이 멈춰 있어도 오류로 드러나도록
 });
 
 async function initSchema() {
@@ -1570,18 +1577,34 @@ app.get('/dashboard.html', requireAuth, (req, res) => {
 
 
 // health check
-app.get('/api/health', (req, res) => res.json({ok:true, ts: Date.now()}));
+// 서버 프로세스가 떠 있으면 ok:true, DB 상태는 db 필드로 따로 알려줌 (접속정보는 노출하지 않고 오류 종류만)
+app.get('/api/health', (req, res) => res.json({
+  ok: true, ts: Date.now(),
+  db: dbStatus.ok ? 'ok' : 'down',
+  ...(dbStatus.ok ? {} : { dbError: dbStatus.error })
+}));
 
-(async () => {
-  try {
-    db = await loadDB();
-    console.log(`✅ Postgres 연결 완료 (회원 ${db.users.size}명 로드)`);
-  } catch (e) {
-    console.error('❌ Postgres 연결 실패:', e.message);
-    process.exit(1);
+// DB 연결: 실패해도 서버를 죽이지 않고 재시도 (죽으면 밖에서는 원인을 알 수 없는 먹통이 됨)
+async function connectDB() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      if (!process.env.DATABASE_URL) throw Object.assign(new Error('DATABASE_URL 없음'), { code: 'NO_DATABASE_URL' });
+      db = await loadDB();
+      dbStatus.ok = true;
+      dbStatus.error = '';
+      console.log(`✅ Postgres 연결 완료 (회원 ${db.users.size}명 로드)`);
+      return;
+    } catch (e) {
+      dbStatus.ok = false;
+      dbStatus.error = String(e.code || (/timeout/i.test(e.message) ? 'TIMEOUT' : e.name) || 'ERROR').slice(0, 40);
+      console.error(`❌ Postgres 연결 실패 (시도 ${attempt}, ${dbStatus.error}):`, e.message);
+      await delay(Math.min(30000, 3000 * attempt));
+    }
   }
-  app.listen(process.env.PORT||3001, () => console.log('✅ 리뷰메이트 서버 실행 중: http://localhost:3001'));
-})();
+}
+
+app.listen(process.env.PORT||3001, () => console.log('✅ 리뷰메이트 서버 실행 중: http://localhost:3001'));
+connectDB();
 
 
 
