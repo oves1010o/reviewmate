@@ -1,0 +1,34 @@
+{
+  "name": "reviewmate-desktop",
+  "productName": "리뷰메이트",
+  "version": "0.1.0",
+  "description": "리뷰메이트 데스크톱 - 사장님 PC에서 네이버 리뷰를 읽고 AI 답글을 등록합니다.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "kr.reviewmate.desktop",
+    "productName": "리뷰메이트",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3"
+  }
+}

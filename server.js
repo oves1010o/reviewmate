@@ -100,12 +100,29 @@ function generateId() { return Math.random().toString(36).substr(2, 12); }
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── 인증 미들웨어 ─────────────────────────────────────────────────────────
+const crypto = require('crypto');
+function hashToken(t) { return crypto.createHash('sha256').update(String(t)).digest('hex'); }
+
+// 웹(쿠키 세션) 또는 데스크톱 앱(Authorization: Bearer 토큰) 둘 다 허용
 function requireAuth(req, res, next) {
-  if (!req.session.userId) return res.status(401).json({ error: '로그인이 필요합니다.' });
-  const user = db.users.get(req.session.userId);
-  if (!user) return res.status(401).json({ error: '유효하지 않은 세션입니다.' });
-  req.user = user;
-  next();
+  if (req.session && req.session.userId) {
+    const user = db.users.get(req.session.userId);
+    if (!user) return res.status(401).json({ error: '유효하지 않은 세션입니다.' });
+    req.user = user;
+    return next();
+  }
+  const m = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
+  if (m) {
+    const h = hashToken(m[1]);
+    for (const [, u] of db.users) {
+      if (Array.isArray(u.desktopTokenHashes) && u.desktopTokenHashes.includes(h)) {
+        req.user = u;
+        req.desktopTokenHash = h;
+        return next();
+      }
+    }
+  }
+  return res.status(401).json({ error: '로그인이 필요합니다.' });
 }
 
 // ── 토큰(선불 크레딧) 설정 ──────────────────────────────────────────────
@@ -188,9 +205,61 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/user/me', requireAuth, (req, res) => {
-  const { password, naverPw, ...safe } = req.user;
+  const { password, naverPw, desktopTokenHashes, ...safe } = req.user;
   safe.tokens = req.user.tokens || 0;
   res.json(safe);
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 데스크톱 앱용 API — 네이버 작업은 사용자 PC의 앱이 하고, 서버는 로그인/AI/토큰만 담당
+// ══════════════════════════════════════════════════════════════════════════
+
+app.post('/api/desktop/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    let found = null;
+    for (const [, u] of db.users) { if (u.email === email) { found = u; break; } }
+    if (!found || !await bcrypt.compare(String(password || ''), found.password)) {
+      return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    }
+    const token = crypto.randomBytes(32).toString('hex');
+    found.desktopTokenHashes = [...(found.desktopTokenHashes || []), hashToken(token)].slice(-5); // 기기 최대 5대
+    db.users.set(found.userId, found);
+    await saveDB();
+    res.json({ success: true, token, storeName: found.storeName, placeId: found.placeId || '', tokens: found.tokens || 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/desktop/logout', requireAuth, async (req, res) => {
+  if (req.desktopTokenHash) {
+    req.user.desktopTokenHashes = (req.user.desktopTokenHashes || []).filter(h => h !== req.desktopTokenHash);
+    db.users.set(req.user.userId, req.user);
+    await saveDB();
+  }
+  res.json({ success: true });
+});
+
+// AI 답글 생성 (서버에서 크롬을 띄우지 않음). source: 'place'(스마트플레이스) | 'store'(스마트스토어)
+app.post('/api/desktop/generate', requireAuth, requireTokens, async (req, res) => {
+  const { reviewText, source, productName, insight, existingReplies } = req.body || {};
+  if (!reviewText || typeof reviewText !== 'string' || reviewText.length > 2000) {
+    return res.status(400).json({ error: '리뷰 내용이 올바르지 않습니다.' });
+  }
+  try {
+    const reply = source === 'store'
+      ? await generateSmartStoreReply(req.user, reviewText, String(productName || ''), String(insight || ''))
+      : await generateAIReply(req.user, reviewText, Array.isArray(existingReplies) ? existingReplies.slice(0, 5).map(String) : []);
+    if (!reply) return res.status(502).json({ error: 'AI 응답이 비어있습니다.' });
+    req.user.tokens = (req.user.tokens || 0) - 1;
+    db.users.set(req.user.userId, req.user);
+    await saveDB();
+    res.json({ reply, tokensLeft: req.user.tokens });
+  } catch (e) {
+    console.error('[desktop/generate]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.put('/api/user/config', requireAuth, async (req, res) => {

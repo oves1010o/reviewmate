@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>리뷰메이트</title>
+<style>
+  :root { --g:#03c75a; --gd:#02a84b; --bg:#f7f7f5; --ink:#1a1a1a; --mut:#777; --line:#e4e4e0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Malgun Gothic", -apple-system, sans-serif; background:var(--bg); color:var(--ink); }
+  [hidden] { display:none !important; }
+  button { font-family:inherit; cursor:pointer; border:none; border-radius:8px; padding:9px 14px; font-size:.85rem; font-weight:700; }
+  .btn { background:var(--g); color:#fff; } .btn:hover { background:var(--gd); }
+  .btn:disabled { background:#9bd9b5; cursor:default; }
+  .ghost { background:#fff; color:var(--ink); border:1px solid var(--line); font-weight:600; }
+  input[type=text], input[type=email], input[type=password], textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:.9rem; background:#fff; }
+  textarea { min-height:90px; resize:vertical; line-height:1.6; }
+
+  #loginView { max-width:360px; margin:12vh auto 0; background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px; }
+  #loginView h1 { font-size:1.3rem; margin:0 0 4px; } .sub { color:var(--mut); font-size:.82rem; margin:0 0 18px; }
+  .field { margin-bottom:12px; } .field label { display:block; font-size:.78rem; font-weight:700; margin-bottom:5px; }
+
+  header { display:flex; align-items:center; gap:10px; padding:12px 20px; background:#fff; border-bottom:1px solid var(--line); }
+  header .name { font-weight:800; } header .sp { flex:1; }
+  .pill { background:#eafaf0; color:var(--gd); font-weight:800; font-size:.8rem; padding:5px 11px; border-radius:99px; }
+  .pill.low { background:#fdecec; color:#b42318; }
+  .tabs { display:flex; gap:6px; padding:14px 20px 0; }
+  .tab { background:transparent; color:var(--mut); border-radius:8px 8px 0 0; } .tab.on { background:#fff; color:var(--ink); border:1px solid var(--line); border-bottom:none; }
+  main { padding:0 20px 30px; } .panel { background:#fff; border:1px solid var(--line); border-radius:0 12px 12px 12px; padding:18px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .bar input { width:200px; } .state { font-size:.82rem; color:var(--mut); } .state.ok { color:var(--gd); font-weight:700; }
+  .msg { font-size:.82rem; padding:9px 12px; border-radius:8px; background:#f2f2f0; margin-bottom:12px; white-space:pre-wrap; }
+  .msg.err { background:#fdecec; color:#b42318; } .msg.ok { background:#eafaf0; color:#1a7a3a; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:10px; }
+  .card.done { opacity:.55; }
+  .meta { font-size:.75rem; color:var(--mut); margin-bottom:6px; } .text { white-space:pre-wrap; line-height:1.6; font-size:.9rem; }
+  .reply { margin-top:10px; } .row { display:flex; gap:8px; margin-top:8px; align-items:center; }
+  .tag { font-size:.7rem; background:#eee; border-radius:5px; padding:2px 6px; margin-left:6px; }
+  .empty { color:var(--mut); text-align:center; padding:30px 0; font-size:.88rem; }
+</style>
+</head>
+<body>
+  <section id="loginView" hidden>
+    <h1>리뷰메이트</h1>
+    <p class="sub">리뷰메이트 계정으로 로그인하세요.</p>
+    <div class="field"><label>이메일</label><input type="email" id="email" autocomplete="username"></div>
+    <div class="field"><label>비밀번호</label><input type="password" id="password" autocomplete="current-password"></div>
+    <div id="loginMsg" class="msg err" hidden></div>
+    <button class="btn" id="loginBtn" style="width:100%">로그인</button>
+  </section>
+
+  <section id="mainView" hidden>
+    <header>
+      <span class="name" id="storeName"></span>
+      <span class="sp"></span>
+      <span class="pill" id="tokenPill"></span>
+      <button class="ghost" id="chargeBtn">토큰 충전</button>
+      <button class="ghost" id="logoutBtn">로그아웃</button>
+    </header>
+    <div class="tabs">
+      <button class="tab on" data-tab="place">스마트플레이스</button>
+      <button class="tab" data-tab="store">스마트스토어</button>
+    </div>
+    <main>
+      <div class="panel">
+        <div class="bar">
+          <span class="state" id="naverState">네이버 로그인 확인 중...</span>
+          <button class="ghost" id="naverLoginBtn">네이버 로그인</button>
+          <button class="ghost" id="naverLogoutBtn" hidden>네이버 로그아웃</button>
+        </div>
+        <div class="bar">
+          <input type="text" id="placeId" placeholder="스마트플레이스 ID (숫자)">
+          <button class="btn" id="loadBtn">리뷰 불러오기</button>
+        </div>
+        <div id="msg" class="msg" hidden></div>
+        <div id="list"></div>
+      </div>
+    </main>
+  </section>
+  <script src="app.js"></script>
+</body>
+</html>
