@@ -1,7 +1,7 @@
 {
   "name": "reviewmate-desktop",
   "productName": "리뷰메이트",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "리뷰메이트 데스크톱 - 사장님 PC에서 네이버 리뷰를 읽고 AI 답글을 등록합니다.",
   "main": "main.js",
   "private": true,

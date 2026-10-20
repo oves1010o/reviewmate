@@ -12,6 +12,8 @@ const LOGIN_URL = {
   store: 'https://accounts.commerce.naver.com/login'
 };
 
+// 스마트스토어 리뷰 목록 주소 (테스트에서만 환경변수로 바꿈)
+const STORE_LIST_URL = process.env.REVIEWMATE_STORE_URL || 'https://sell.smartstore.naver.com/#/review/search';
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── 설정(서버 로그인 토큰) 저장 ─────────────────────────────────────────────
@@ -113,20 +115,24 @@ async function waitFor(win, selector, timeout = 20000) {
   return false;
 }
 
-async function withWorker(fn) {
-  const win = makeNaverWindow({ show: DEBUG });
+async function withWorker(fn, { show = DEBUG } = {}) {
+  const win = makeNaverWindow({ show });
   try { return await fn(win); } finally { if (!win.isDestroyed()) win.destroy(); }
 }
+// 답글 등록은 글자 입력이 필요해서 창을 화면에 보여준다 (숨은 창에서는 입력이 안 먹힐 수 있고, 사장님도 등록 과정을 눈으로 확인할 수 있음)
+const withVisibleWorker = (fn) => withWorker(fn, { show: true });
 
 // 답글 입력창에 실제 키 입력과 같은 이벤트로 글자를 넣음 (React 화면에서도 인식됨)
-async function typeIntoTextarea(win, text) {
-  if (!(await waitFor(win, 'textarea', 10000))) throw new Error('답글 입력창을 찾지 못했습니다.');
-  await run(win, `(() => { const t = document.querySelector('textarea'); t.focus(); t.select(); })()`);
+// selector로 범위를 좁혀서 입력한다 (스마트스토어 목록에는 검색창 textarea가 먼저 있어서, 범위를 안 좁히면 엉뚱한 곳에 입력됨)
+async function typeIntoTextarea(win, text, selector = 'textarea', pick = 'first') {
+  if (!(await waitFor(win, selector, 10000))) throw new Error('답글 입력창을 찾지 못했습니다.');
+  const target = `(() => { const a = document.querySelectorAll(${JSON.stringify(selector)}); return ${pick === 'last' ? 'a[a.length - 1]' : 'a[0]'}; })()`;
+  await run(win, `(() => { const t = ${target}; t.focus(); t.select(); })()`);
   win.webContents.focus();
   await delay(150);
   await win.webContents.insertText(text);
   await delay(500);
-  const typed = await run(win, `document.querySelector('textarea')?.value || ''`);
+  const typed = await run(win, `(${target})?.value || ''`);
   if (!typed || typed.trim().length < 2) throw new Error('답글 입력에 실패했습니다.');
 }
 
@@ -211,7 +217,7 @@ handle('place:reviews', (placeId) => withWorker(async (win) => {
 }));
 
 // 스마트플레이스: 답글 등록 (리뷰 글로 카드를 찾아서 입력)
-handle('place:reply', ({ placeId, reviewText, replyText }) => withWorker(async (win) => {
+handle('place:reply', ({ placeId, reviewText, replyText }) => withVisibleWorker(async (win) => {
   if (!replyText || !replyText.trim()) throw new Error('답글 내용이 비어있습니다.');
   await loadPage(win, `https://smartplace.naver.com/bizes/place/${placeId}/reviews`);
   const sel = 'li[class*="Review_pui_review"], li[class*="Review_review_list_item"]';
@@ -252,7 +258,7 @@ handle('place:reply', ({ placeId, reviewText, replyText }) => withWorker(async (
 
 // 스마트스토어: 리뷰 목록 (판매자센터 표 구조)
 handle('store:reviews', () => withWorker(async (win) => {
-  await loadPage(win, 'https://sell.smartstore.naver.com/#/review/search');
+  await loadPage(win, STORE_LIST_URL);
   const ok = await waitFor(win, ".ag-center-cols-container [role='row'][row-id]", 25000);
   if (!ok) {
     await assertLoggedIn(win, 'https://sell.smartstore.naver.com/'); // 로그인이 풀린 거면 그 안내를 우선 표시
@@ -269,21 +275,78 @@ handle('store:reviews', () => withWorker(async (win) => {
 }));
 
 // 스마트스토어: 답글 등록 (리뷰 상세창 열기 → 입력 → 등록)
-handle('store:reply', ({ reviewId, replyText }) => withWorker(async (win) => {
-  if (!reviewId) throw new Error('이 리뷰는 자동 등록용 식별자가 없습니다. 목록을 새로고침 해주세요.');
+// 흐름은 친구분 프로그램(naver-review-automation.js)을 따름:
+// 리뷰 링크를 "실제로 클릭" → 상세창 안의 입력칸에 입력 → 답글 등록 버튼 → 저장 확인
+// (openReviewDetailModal 은 화면 내부(AngularJS) 함수라 window 에서 직접 부를 수 없음)
+handle('store:reply', ({ reviewId, product, replyText }) => withVisibleWorker(async (win) => {
+  if (!/^\d+$/.test(String(reviewId || ''))) throw new Error('이 리뷰는 자동 등록용 식별자가 없습니다. 목록을 새로고침 해주세요.');
   if (!replyText || !replyText.trim()) throw new Error('답글 내용이 비어있습니다.');
-  await loadPage(win, 'https://sell.smartstore.naver.com/#/review/search');
-  if (!(await waitFor(win, ".ag-center-cols-container [role='row'][row-id]", 25000))) throw new Error('리뷰 표를 찾지 못했습니다.');
-  const opened = await run(win, `((id) => { if (typeof window.openReviewDetailModal === 'function') { window.openReviewDetailModal(Number(id)); return true; } return false; })(${JSON.stringify(reviewId)})`);
-  if (!opened) throw new Error('리뷰 상세창을 여는 함수를 찾지 못했습니다.');
+  const LIST = STORE_LIST_URL;
+  const ROW = ".ag-center-cols-container [role='row'][row-id]";
+  const MODAL = '.data-target-review-detail.in';
+  const linkSel = `[ng-click*="openReviewDetailModal(${reviewId},"]`;
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  await loadPage(win, LIST);
+  if (!(await waitFor(win, ROW, 25000))) { await assertLoggedIn(win, LIST); throw new Error('리뷰 표를 찾지 못했습니다.'); }
+
+  // 현재 목록에 없으면 리뷰 번호로 검색
+  let found = await run(win, `!!document.querySelector(${JSON.stringify(linkSel)})`);
+  if (!found) {
+    await run(win, `(() => { const b = [...document.querySelectorAll('button, label')].find((x) => /1개월/.test(x.innerText)); if (b) b.click(); })()`);
+    await delay(500);
+    const hasBox = await run(win, `(() => { const t = document.querySelector("textarea[ng-model='vm.searchFormData.viewData.searchKeyword'], textarea[placeholder*='복수 검색']"); if (!t) return false; t.focus(); t.select(); return true; })()`);
+    if (hasBox) {
+      win.webContents.focus();
+      await win.webContents.insertText(String(reviewId));
+      await delay(300);
+      await run(win, `(() => { const b = [...document.querySelectorAll('button')].find((x) => /^\\s*검색\\s*$/.test(x.innerText) && !x.disabled); if (b) b.click(); })()`);
+      await delay(2500);
+    }
+    found = await waitFor(win, linkSel, 8000);
+  }
+  if (!found) throw new Error('이 리뷰를 목록에서 찾지 못했어요. (조회 기간 밖이거나 삭제된 리뷰일 수 있어요)');
+
+  await run(win, `document.querySelector(${JSON.stringify(linkSel)}).click()`);
+  if (!(await waitFor(win, MODAL, 10000))) throw new Error('리뷰 상세창이 열리지 않았습니다.');
   await delay(1500);
-  await typeIntoTextarea(win, replyText);
-  const clicked = await run(win, `(() => {
-    const t = [...document.querySelectorAll('button')].find((b) => /등록|확인|저장/.test(b.innerText) && !b.disabled);
-    if (t) { t.click(); return true; } return false;
+
+  // 엉뚱한 리뷰에 답글이 달리지 않도록 상세창의 리뷰 번호/상품명을 확인
+  const detailText = await run(win, `document.querySelector(${JSON.stringify(MODAL)}).innerText`);
+  if (!detailText.includes(String(reviewId))) throw new Error('다른 리뷰의 상세창이 열려서 등록을 중단했어요.');
+  if (product && !norm(detailText).includes(norm(product))) throw new Error('상품명이 달라서 등록을 중단했어요.');
+
+  // 이미 답글이 있으면 덮어쓰지 않음
+  const hasReply = await run(win, `(() => { const m = document.querySelector(${JSON.stringify(MODAL)}); return !!([...m.querySelectorAll('button')].find((b) => /답글 수정|답글 삭제/.test(b.innerText)) || m.querySelector('[progress-button="vm.func.updateCommentContent()"]')); })()`);
+  if (hasReply) throw new Error('이미 답글이 등록된 리뷰예요.');
+
+  await typeIntoTextarea(win, replyText, `${MODAL} textarea`, 'last');
+
+  const submitted = await run(win, `(() => {
+    const m = document.querySelector(${JSON.stringify(MODAL)});
+    const b = [...m.querySelectorAll('button')].find((x) => /답글 등록/.test(x.innerText) && !x.disabled)
+      || m.querySelector('button[progress-button="vm.func.createCommentContent()"]');
+    if (!b || b.disabled) return false;
+    b.click(); return true;
   })()`);
-  if (!clicked) throw new Error('등록 버튼을 찾지 못했습니다.');
-  await delay(2000);
+  if (!submitted) throw new Error('답글 등록 버튼을 찾지 못했습니다.');
+  await delay(800);
+
+  // 확인 팝업이 뜨면 "확인" (삭제 팝업이면 중단)
+  const confirmRes = await run(win, `(() => {
+    const m = [...document.querySelectorAll('.bootbox.modal.in, .modal.in:not(.data-target-review-detail)')].pop();
+    if (!m) return 'none';
+    if (/삭제/.test(m.innerText)) return 'delete';
+    const b = [...m.querySelectorAll('button')].reverse().find((x) => /확인/.test(x.innerText));
+    if (b) { b.click(); return 'clicked'; }
+    return 'none';
+  })()`);
+  if (confirmRes === 'delete') throw new Error('삭제 확인창이 떠서 자동 등록을 중단했어요.');
+
+  // 저장 확인: 상세창에 "답글 수정/삭제" 버튼이 생기면 저장된 것
+  await delay(2500);
+  const saved = await run(win, `(() => { const m = document.querySelector(${JSON.stringify(MODAL)}) || document; return !!([...m.querySelectorAll('button')].find((b) => /답글 수정|답글 삭제/.test(b.innerText))); })()`);
+  if (!saved) throw new Error('네이버 화면에서 답글 저장 완료를 확인하지 못했어요. 네이버에서 직접 확인해주세요.');
   return true;
 }));
 

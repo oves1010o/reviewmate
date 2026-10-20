@@ -199,7 +199,7 @@ async function post(rv, cardEl, btn) {
   btn.disabled = true; btn.textContent = '등록 중...';
   const r = state.tab === 'place'
     ? await window.api.placeReply({ placeId: $('placeId').value.trim(), reviewText: rv.text, replyText: rv.reply })
-    : await window.api.storeReply({ reviewId: rv.reviewId, replyText: rv.reply });
+    : await window.api.storeReply({ reviewId: rv.reviewId, product: rv.product, replyText: rv.reply });
   btn.disabled = false; btn.textContent = '네이버에 등록';
   if (!r.ok) {
     if (r.code === 'NAVER_LOGIN') refreshNaverState();
