@@ -14,6 +14,8 @@ const LOGIN_URL = {
 
 // 스마트스토어 리뷰 목록 주소 (테스트에서만 환경변수로 바꿈)
 const STORE_LIST_URL = process.env.REVIEWMATE_STORE_URL || 'https://sell.smartstore.naver.com/#/review/search';
+// 스마트플레이스 리뷰 주소의 앞부분 (테스트에서만 환경변수로 바꿈)
+const PLACE_BASE = process.env.REVIEWMATE_PLACE_BASE || 'https://smartplace.naver.com/bizes/place';
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── 설정(서버 로그인 토큰) 저장 ─────────────────────────────────────────────
@@ -200,7 +202,7 @@ handle('naver:login', (kind) => new Promise((resolve) => {
 // 스마트플레이스: 리뷰 목록 (서버 코드와 같은 선택자)
 handle('place:reviews', (placeId) => withWorker(async (win) => {
   if (!/^\d+$/.test(String(placeId || ''))) throw new Error('스마트플레이스 ID(숫자)를 입력해주세요.');
-  await loadPage(win, `https://smartplace.naver.com/bizes/place/${placeId}/reviews`);
+  await loadPage(win, `${PLACE_BASE}/${placeId}/reviews`);
   const ok = await waitFor(win, 'li[class*="Review_pui_review"], li[class*="Review_review_list_item"]', 20000);
   if (!ok) throw new Error('리뷰 목록을 찾지 못했습니다. (ID가 맞는지, 리뷰가 있는지 확인해주세요)');
   return run(win, `(() => {
@@ -219,7 +221,7 @@ handle('place:reviews', (placeId) => withWorker(async (win) => {
 // 스마트플레이스: 답글 등록 (리뷰 글로 카드를 찾아서 입력)
 handle('place:reply', ({ placeId, reviewText, replyText }) => withVisibleWorker(async (win) => {
   if (!replyText || !replyText.trim()) throw new Error('답글 내용이 비어있습니다.');
-  await loadPage(win, `https://smartplace.naver.com/bizes/place/${placeId}/reviews`);
+  await loadPage(win, `${PLACE_BASE}/${placeId}/reviews`);
   const sel = 'li[class*="Review_pui_review"], li[class*="Review_review_list_item"]';
   if (!(await waitFor(win, sel, 20000))) throw new Error('리뷰 목록을 찾지 못했습니다.');
   const found = await run(win, `((target) => {
